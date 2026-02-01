@@ -1,96 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Sunlight Village Design System - Beach Resort Theme */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Core backgrounds - Clean whites with warmth */
+    --background: 45 30% 98%;
+    --foreground: 215 25% 15%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Cards - Soft warm white */
+    --card: 45 40% 99%;
+    --card-foreground: 215 25% 15%;
 
+    /* Popovers */
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 215 25% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Ocean Blue */
+    --primary: 200 85% 45%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Sandy Beige */
+    --secondary: 38 35% 92%;
+    --secondary-foreground: 38 25% 25%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted - Light sand */
+    --muted: 38 20% 94%;
+    --muted-foreground: 215 15% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Sunlight Gold */
+    --accent: 42 95% 55%;
+    --accent-foreground: 42 80% 15%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Destructive - Coral */
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Success - Sea Green */
+    --success: 158 64% 42%;
+    --success-foreground: 0 0% 100%;
 
-    --radius: 0.5rem;
+    /* Warning - Sunset Orange */
+    --warning: 38 92% 55%;
+    --warning-foreground: 38 80% 15%;
 
-    --sidebar-background: 0 0% 98%;
+    /* Borders */
+    --border: 38 25% 88%;
+    --input: 38 25% 88%;
+    --ring: 200 85% 45%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --radius: 0.75rem;
 
-    --sidebar-primary: 240 5.9% 10%;
+    /* Sidebar */
+    --sidebar-background: 200 35% 18%;
+    --sidebar-foreground: 200 10% 95%;
+    --sidebar-primary: 42 95% 55%;
+    --sidebar-primary-foreground: 42 80% 15%;
+    --sidebar-accent: 200 30% 25%;
+    --sidebar-accent-foreground: 200 10% 95%;
+    --sidebar-border: 200 25% 25%;
+    --sidebar-ring: 42 95% 55%;
 
-    --sidebar-primary-foreground: 0 0% 98%;
+    /* Custom gradients */
+    --gradient-ocean: linear-gradient(135deg, hsl(200 85% 45%) 0%, hsl(190 75% 55%) 100%);
+    --gradient-sunset: linear-gradient(135deg, hsl(42 95% 55%) 0%, hsl(25 90% 60%) 100%);
+    --gradient-sand: linear-gradient(180deg, hsl(38 35% 92%) 0%, hsl(45 30% 98%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(200 85% 45%) 0%, hsl(200 75% 35%) 50%, hsl(215 60% 25%) 100%);
 
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Shadows */
+    --shadow-soft: 0 4px 20px -4px hsl(200 50% 20% / 0.08);
+    --shadow-medium: 0 8px 30px -6px hsl(200 50% 20% / 0.12);
+    --shadow-strong: 0 12px 40px -8px hsl(200 50% 20% / 0.18);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 215 35% 10%;
+    --foreground: 45 20% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 215 30% 14%;
+    --card-foreground: 45 20% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 215 30% 12%;
+    --popover-foreground: 45 20% 95%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 200 80% 55%;
+    --primary-foreground: 215 40% 10%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 215 25% 20%;
+    --secondary-foreground: 45 20% 90%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 215 25% 18%;
+    --muted-foreground: 215 15% 60%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 42 90% 50%;
+    --accent-foreground: 42 80% 10%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --success: 158 55% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 85% 50%;
+    --warning-foreground: 38 80% 10%;
+
+    --border: 215 25% 22%;
+    --input: 215 25% 22%;
+    --ring: 200 80% 55%;
+
+    --sidebar-background: 215 40% 8%;
+    --sidebar-foreground: 45 15% 90%;
+    --sidebar-primary: 42 90% 50%;
+    --sidebar-primary-foreground: 42 80% 10%;
+    --sidebar-accent: 215 30% 15%;
+    --sidebar-accent-foreground: 45 15% 90%;
+    --sidebar-border: 215 25% 18%;
+    --sidebar-ring: 42 90% 50%;
+
+    --gradient-ocean: linear-gradient(135deg, hsl(200 70% 50%) 0%, hsl(190 65% 45%) 100%);
+    --gradient-sunset: linear-gradient(135deg, hsl(42 90% 50%) 0%, hsl(25 85% 55%) 100%);
+    --gradient-sand: linear-gradient(180deg, hsl(215 25% 18%) 0%, hsl(215 35% 10%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(200 70% 40%) 0%, hsl(200 60% 30%) 50%, hsl(215 50% 18%) 100%);
+
+    --shadow-soft: 0 4px 20px -4px hsl(0 0% 0% / 0.3);
+    --shadow-medium: 0 8px 30px -6px hsl(0 0% 0% / 0.4);
+    --shadow-strong: 0 12px 40px -8px hsl(0 0% 0% / 0.5);
   }
 }
 
@@ -100,6 +138,114 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
   }
+
+  h1, h2, h3 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  .gradient-ocean {
+    background: var(--gradient-ocean);
+  }
+  
+  .gradient-sunset {
+    background: var(--gradient-sunset);
+  }
+  
+  .gradient-sand {
+    background: var(--gradient-sand);
+  }
+  
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-medium {
+    box-shadow: var(--shadow-medium);
+  }
+
+  .shadow-strong {
+    box-shadow: var(--shadow-strong);
+  }
+
+  .glass {
+    @apply bg-white/80 backdrop-blur-md;
+  }
+
+  .glass-dark {
+    @apply bg-black/40 backdrop-blur-md;
+  }
+}
+
+/* React Big Calendar Styles */
+.rbc-calendar {
+  @apply bg-card rounded-xl overflow-hidden;
+}
+
+.rbc-header {
+  @apply py-3 px-2 font-medium text-muted-foreground text-sm border-b border-border;
+}
+
+.rbc-today {
+  @apply bg-primary/5;
+}
+
+.rbc-event {
+  @apply rounded-md text-xs font-medium px-2 py-1 border-0;
+}
+
+.rbc-event.confirmed {
+  @apply bg-success text-success-foreground;
+}
+
+.rbc-event.unconfirmed {
+  @apply bg-warning text-warning-foreground;
+}
+
+.rbc-event.cancelled {
+  @apply bg-muted text-muted-foreground line-through;
+}
+
+.rbc-toolbar {
+  @apply mb-4 flex flex-wrap gap-2 items-center justify-between;
+}
+
+.rbc-toolbar button {
+  @apply px-3 py-1.5 rounded-lg text-sm font-medium transition-colors;
+  @apply bg-secondary text-secondary-foreground hover:bg-secondary/80;
+}
+
+.rbc-toolbar button.rbc-active {
+  @apply bg-primary text-primary-foreground;
+}
+
+.rbc-month-view, .rbc-time-view {
+  @apply border border-border rounded-lg overflow-hidden;
+}
+
+.rbc-day-bg + .rbc-day-bg {
+  @apply border-l border-border;
+}
+
+.rbc-month-row + .rbc-month-row {
+  @apply border-t border-border;
+}
+
+.rbc-off-range-bg {
+  @apply bg-muted/50;
+}
+
+.rbc-date-cell {
+  @apply p-2 text-right text-sm;
+}
+
+.rbc-date-cell.rbc-now {
+  @apply font-bold text-primary;
 }
