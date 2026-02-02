@@ -5,6 +5,7 @@ export {
   generateBookingReceipt, 
   generateFinancialReport,
   generateBookingsReport,
+  generateExpensesReport,
   type UnitPerformanceData,
 } from './pdf-service';
 
@@ -16,3 +17,4 @@ export {
 } from './translations';
 
 export type { BookingsReportOptions } from './dom/bookings-report-template';
+export type { ExpensesReportOptions } from './dom/expenses-report-template';

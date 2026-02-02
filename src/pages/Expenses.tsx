@@ -36,25 +36,26 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Plus, CalendarIcon, Loader2, Trash2, Receipt, DollarSign, TrendingUp, TrendingDown, Download } from 'lucide-react';
-import { format } from 'date-fns';
+import { Plus, CalendarIcon, Loader2, Trash2, Receipt, DollarSign, TrendingUp, TrendingDown, Download, FileText } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { formatEGP, formatEGPCompact } from '@/lib/currency';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getUnitTypeEmoji } from '@/types/database';
-import { generateFinancialReport, PdfLanguage } from '@/lib/pdf';
+import { generateFinancialReport, generateExpensesReport, PdfLanguage } from '@/lib/pdf';
 import { PdfLanguageModal } from '@/components/pdf/PdfLanguageModal';
 import { toast } from '@/hooks/use-toast';
+import { DateRange } from 'react-day-picker';
 
 const expenseCategories = [
   'Maintenance',
+  'Electricity',
+  'Water',
   'Utilities',
   'Cleaning',
   'Repairs',
+  'Salaries',
   'Supplies',
-  'Insurance',
-  'Taxes',
-  'Marketing',
   'Other',
 ];
 
@@ -72,6 +73,13 @@ const ExpensesPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('expenses');
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [expensesPdfModalOpen, setExpensesPdfModalOpen] = useState(false);
+  
+  // Date range filter for expenses report
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
   
   // Form state
   const [unitId, setUnitId] = useState<string>('');
@@ -93,9 +101,21 @@ const ExpensesPage = () => {
 
   // Filter expenses for display based on unit filter
   const filteredExpenses = useMemo(() => {
-    if (unitFilter === 'all') return expenses;
-    return expenses.filter(e => e.unit_id === unitFilter);
+    let result = expenses;
+    if (unitFilter && unitFilter !== 'all') {
+      result = result.filter(e => e.unit_id === unitFilter);
+    }
+    return result;
   }, [expenses, unitFilter]);
+
+  // Filter expenses by date range for PDF report
+  const dateFilteredExpenses = useMemo(() => {
+    if (!dateRange?.from || !dateRange?.to) return filteredExpenses;
+    return filteredExpenses.filter(expense => {
+      const expenseDate = parseISO(expense.expense_date);
+      return isWithinInterval(expenseDate, { start: dateRange.from!, end: dateRange.to! });
+    });
+  }, [filteredExpenses, dateRange]);
 
   // Calculate unit performance data (Revenue = Base Rent ONLY, not housekeeping)
   const unitPerformanceData = useMemo((): UnitPerformanceData[] => {
@@ -177,6 +197,31 @@ const ExpensesPage = () => {
       toast({
         title: 'Export Failed',
         description: 'Failed to generate the PDF. Please try again.',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
+
+  const handleExportExpensesReport = async (language: PdfLanguage) => {
+    try {
+      await generateExpensesReport({
+        expenses: dateFilteredExpenses,
+        language,
+        dateRange: dateRange?.from && dateRange?.to ? {
+          from: dateRange.from,
+          to: dateRange.to,
+        } : undefined,
+      });
+      toast({
+        title: 'Expenses Report Downloaded',
+        description: 'Your expenses report has been generated successfully.',
+      });
+    } catch (error) {
+      console.error('Failed to generate expenses report:', error);
+      toast({
+        title: 'Export Failed',
+        description: 'Failed to generate the expenses report. Please try again.',
         variant: 'destructive',
       });
       throw error;
@@ -284,21 +329,73 @@ const ExpensesPage = () => {
 
           {/* Expenses Tab */}
           <TabsContent value="expenses" className="space-y-6">
-            {/* Filter */}
-            <div className="flex items-center gap-4">
-              <Select value={unitFilter} onValueChange={setUnitFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder={t('filterByUnit')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('allUnits')}</SelectItem>
-                  {units.map((unit) => (
-                    <SelectItem key={unit.id} value={unit.id}>
-                      {getUnitTypeEmoji(unit.type)} {unit.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Filters and Actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Unit Filter */}
+                <Select value={unitFilter} onValueChange={setUnitFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder={t('filterByUnit')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('allUnits')}</SelectItem>
+                    {units.map((unit) => (
+                      <SelectItem key={unit.id} value={unit.id}>
+                        {getUnitTypeEmoji(unit.type)} {unit.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Date Range Picker */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "justify-start text-left font-normal min-w-[240px]",
+                        !dateRange?.from && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange?.from ? (
+                        dateRange.to ? (
+                          <>
+                            {format(dateRange.from, "LLL dd, y")} -{" "}
+                            {format(dateRange.to, "LLL dd, y")}
+                          </>
+                        ) : (
+                          format(dateRange.from, "LLL dd, y")
+                        )
+                      ) : (
+                        <span>Pick date range</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      initialFocus
+                      mode="range"
+                      defaultMonth={dateRange?.from}
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Export Button */}
+              <Button
+                onClick={() => setExpensesPdfModalOpen(true)}
+                variant="outline"
+                className="gap-2"
+                disabled={dateFilteredExpenses.length === 0}
+              >
+                <FileText className="h-4 w-4" />
+                Download Expenses Report
+              </Button>
             </div>
 
             {/* Expenses Table */}
@@ -524,6 +621,7 @@ const ExpensesPage = () => {
                         selected={expenseDate}
                         onSelect={(d) => d && setExpenseDate(d)}
                         initialFocus
+                        className="pointer-events-auto"
                       />
                     </PopoverContent>
                   </Popover>
@@ -564,12 +662,20 @@ const ExpensesPage = () => {
           </DialogContent>
         </Dialog>
 
-        {/* PDF Language Selection Modal */}
+        {/* PDF Language Selection Modal - Financial Report */}
         <PdfLanguageModal
           open={pdfModalOpen}
           onOpenChange={setPdfModalOpen}
           onConfirm={handleExportReport}
           title="Export Financial Report"
+        />
+
+        {/* PDF Language Selection Modal - Expenses Report */}
+        <PdfLanguageModal
+          open={expensesPdfModalOpen}
+          onOpenChange={setExpensesPdfModalOpen}
+          onConfirm={handleExportExpensesReport}
+          title="Export Expenses Report"
         />
       </div>
     </AppLayout>
