@@ -206,8 +206,8 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   const labels = pdfLabels[language];
   const pdf = new jsPDF('p', 'mm', 'a4');
   
-  // Setup font (Amiri for both languages)
-  const { isArabic } = await setupPdfLanguage(pdf, language);
+  // Setup font (Amiri for both languages) and get text shaping helper
+  const { isArabic, t } = await setupPdfLanguage(pdf, language);
   
   // Calculate financials
   const baseRent = data.dailyRate * data.durationDays;
@@ -217,21 +217,21 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   
   const pageWidth = pdf.internal.pageSize.getWidth();
   
-  // Header
-  drawBrandHeader(pdf, labels.title, labels.subtitle, isArabic);
+  // Header - use text shaping for Arabic
+  drawBrandHeader(pdf, t(labels.title), t(labels.subtitle), isArabic);
   
   // Date line
   pdf.setFontSize(10);
   pdf.setTextColor(...COLORS.muted);
-  const dateStr = `${labels.date}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`;
+  const dateStr = `${t(labels.date)}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`;
   pdf.text(dateStr, pageWidth / 2, 47, { align: 'center' });
   
   let yPos = 55;
   const align = isArabic ? 'right' : 'left';
   
-  // Helper for key-value rows
+  // Helper for key-value rows with text shaping
   const makeKvRows = (rows: [string, string][]) => 
-    isArabic ? rows.map(([k, v]) => [v, k]) : rows;
+    isArabic ? rows.map(([k, v]) => [t(v), t(k)]) : rows;
   
   const kvColumnStyles = isArabic
     ? { 0: { halign: 'right' }, 1: { halign: 'right', fontStyle: 'bold', textColor: COLORS.muted } }
@@ -242,7 +242,7 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   // ─────────────────────────────────────────────────────────────────────────
   autoTable(pdf, {
     startY: yPos,
-    head: [[{ content: labels.tenantInfo, colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: align } }]],
+    head: [[{ content: t(labels.tenantInfo), colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: align } }]],
     body: makeKvRows([
       [labels.name, data.tenantName],
       [labels.phone, data.phoneNumber || '—'],
@@ -264,7 +264,7 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   // ─────────────────────────────────────────────────────────────────────────
   autoTable(pdf, {
     startY: yPos,
-    head: [[{ content: labels.propertyDetails, colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: align } }]],
+    head: [[{ content: t(labels.propertyDetails), colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: align } }]],
     body: makeKvRows([
       [labels.unit, `${getUnitTypeEmoji(data.unitType)} ${data.unitName}`],
       [labels.type, data.unitType],
@@ -286,23 +286,29 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   // Pricing Table
   // ─────────────────────────────────────────────────────────────────────────
   const pricingRows: [string, string][] = [
-    [labels.baseAmount, formatEGP(baseRent)],
+    [t(labels.baseAmount), formatEGP(baseRent)],
   ];
   if (housekeeping > 0) {
-    pricingRows.push([labels.housekeeping, formatEGP(housekeeping)]);
+    pricingRows.push([t(labels.housekeeping), formatEGP(housekeeping)]);
   }
-  pricingRows.push([labels.grandTotal, formatEGP(grandTotal)]);
+  pricingRows.push([t(labels.grandTotal), formatEGP(grandTotal)]);
   if (deposit > 0) {
-    pricingRows.push([`${labels.refundableDeposit} *`, formatEGP(deposit)]);
+    pricingRows.push([`${t(labels.refundableDeposit)} *`, formatEGP(deposit)]);
   }
   
+  const shapedPricing = t(labels.pricing);
+  const shapedDescription = t(labels.description);
+  const shapedAmount = t(labels.amount);
+  
   const pricingHead = isArabic
-    ? [[{ content: labels.pricing, colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: 'right' } }], [labels.amount, labels.description]]
-    : [[{ content: labels.pricing, colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: 'left' } }], [labels.description, labels.amount]];
+    ? [[{ content: shapedPricing, colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: 'right' } }], [shapedAmount, shapedDescription]]
+    : [[{ content: shapedPricing, colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: 'left' } }], [shapedDescription, shapedAmount]];
   
   const pricingBody = isArabic
     ? pricingRows.map(([k, v]) => [v, k])
     : pricingRows;
+  
+  const shapedGrandTotal = t(labels.grandTotal);
   
   autoTable(pdf, {
     startY: yPos,
@@ -323,7 +329,7 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
       const labelCell = isArabic ? rowData[1] : rowData[0];
       
       // Bold Grand Total
-      if (labelCell?.includes(labels.grandTotal)) {
+      if (labelCell?.includes(shapedGrandTotal)) {
         hookData.cell.styles.fontStyle = 'bold';
         hookData.cell.styles.fillColor = [230, 240, 250];
       }
@@ -341,14 +347,14 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   if (deposit > 0) {
     pdf.setFontSize(9);
     pdf.setTextColor(...COLORS.muted);
-    pdf.text(labels.depositNote, isArabic ? pageWidth - LAYOUT.marginX : LAYOUT.marginX, yPos, { align });
+    pdf.text(t(labels.depositNote), isArabic ? pageWidth - LAYOUT.marginX : LAYOUT.marginX, yPos, { align });
   }
   
   // Footer on all pages
   const totalPages = pdf.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
     pdf.setPage(p);
-    drawPageFooter(pdf, labels.thanks, `${labels.page} ${p} ${labels.of} ${totalPages}`);
+    drawPageFooter(pdf, t(labels.thanks), `${t(labels.page)} ${p} ${t(labels.of)} ${totalPages}`);
   }
   
   // Save
@@ -384,36 +390,36 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
   const labels = pdfLabels[language];
   const pdf = new jsPDF('p', 'mm', 'a4');
   
-  const { isArabic } = await setupPdfLanguage(pdf, language);
+  const { isArabic, t } = await setupPdfLanguage(pdf, language);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
   const totalPagesPlaceholder = '{total_pages_count_string}';
   
   // Header
-  drawBrandHeader(pdf, labels.title, labels.reportTitle, isArabic);
+  drawBrandHeader(pdf, t(labels.title), t(labels.reportTitle), isArabic);
   
   // Meta info
   pdf.setFontSize(10);
   pdf.setTextColor(...COLORS.muted);
-  const metaLine1 = `${labels.generated}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`;
-  const metaLine2 = `${labels.dateRange}: ${data.dateRange} | ${labels.scope}: ${data.unitScope}`;
+  const metaLine1 = `${t(labels.generated)}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`;
+  const metaLine2 = `${t(labels.dateRange)}: ${data.dateRange} | ${t(labels.scope)}: ${data.unitScope}`;
   pdf.text(metaLine1, pageWidth / 2, 47, { align: 'center' });
   pdf.text(metaLine2, pageWidth / 2, 53, { align: 'center' });
   
   let yPos = 62;
   const align = isArabic ? 'right' : 'left';
   
-  // Summary stats
+  // Summary stats - with text shaping
   const statsRows: [string, string][] = [
-    [labels.totalRevenue, formatEGP(data.totalRevenue)],
+    [t(labels.totalRevenue), formatEGP(data.totalRevenue)],
   ];
   if (data.housekeepingTotal && data.housekeepingTotal > 0) {
-    statsRows.push([labels.housekeeping, formatEGP(data.housekeepingTotal)]);
+    statsRows.push([t(labels.housekeeping), formatEGP(data.housekeepingTotal)]);
   }
   statsRows.push(
-    [labels.totalBookings, data.totalBookings.toString()],
-    [labels.occupiedDays, `${data.occupiedDays} ${labels.days}`],
-    [labels.avgDailyRate, formatEGP(data.averageDailyRate)]
+    [t(labels.totalBookings), data.totalBookings.toString()],
+    [t(labels.occupiedDays), `${data.occupiedDays} ${t(labels.days)}`],
+    [t(labels.avgDailyRate), formatEGP(data.averageDailyRate)]
   );
   
   autoTable(pdf, {
@@ -433,18 +439,18 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
   // Bookings section title
   pdf.setFontSize(14);
   pdf.setTextColor(...COLORS.text);
-  pdf.text(labels.totalBookings, isArabic ? pageWidth - LAYOUT.marginX : LAYOUT.marginX, yPos, { align });
+  pdf.text(t(labels.totalBookings), isArabic ? pageWidth - LAYOUT.marginX : LAYOUT.marginX, yPos, { align });
   yPos += 8;
   
-  // Bookings table with pagination
-  const headCols = [labels.unit, labels.tenant, labels.dates, labels.amount, labels.status, labels.payment];
+  // Bookings table with pagination - headers shaped
+  const headCols = [t(labels.unit), t(labels.tenant), t(labels.dates), t(labels.amount), t(labels.status), t(labels.payment)];
   const headRow = isArabic ? [...headCols].reverse() : headCols;
   
   autoTable(pdf, {
     startY: yPos,
     head: [headRow],
     body: data.bookings.map((b) => {
-      const row = [b.unitName, b.tenantName, b.dates, formatEGP(b.amount), b.status, b.paymentStatus];
+      const row = [t(b.unitName), t(b.tenantName), b.dates, formatEGP(b.amount), b.status, b.paymentStatus];
       return isArabic ? row.reverse() : row;
     }),
     theme: 'grid',
@@ -456,9 +462,9 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
     didDrawPage: (hookData) => {
       // Redraw header on new pages
       if (hookData.pageNumber > 1) {
-        drawBrandHeader(pdf, labels.title, labels.reportTitle, isArabic);
+        drawBrandHeader(pdf, t(labels.title), t(labels.reportTitle), isArabic);
       }
-      drawPageFooter(pdf, labels.thanks, `${labels.page} ${hookData.pageNumber} ${labels.of} ${totalPagesPlaceholder}`);
+      drawPageFooter(pdf, t(labels.thanks), `${t(labels.page)} ${hookData.pageNumber} ${t(labels.of)} ${totalPagesPlaceholder}`);
     },
   });
   
@@ -489,19 +495,19 @@ export const generateUnitPerformancePDF = async (
   const labels = pdfLabels[language];
   const pdf = new jsPDF('p', 'mm', 'a4');
   
-  const { isArabic } = await setupPdfLanguage(pdf, language);
+  const { isArabic, t } = await setupPdfLanguage(pdf, language);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
   const totalPagesPlaceholder = '{total_pages_count_string}';
   
   // Header
-  drawBrandHeader(pdf, labels.title, labels.unitPerformance, isArabic);
+  drawBrandHeader(pdf, t(labels.title), t(labels.unitPerformance), isArabic);
   
   // Meta info
   pdf.setFontSize(10);
   pdf.setTextColor(...COLORS.muted);
-  pdf.text(`${labels.generated}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`, pageWidth / 2, 47, { align: 'center' });
-  pdf.text(`${labels.dateRange}: ${dateRange}`, pageWidth / 2, 53, { align: 'center' });
+  pdf.text(`${t(labels.generated)}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`, pageWidth / 2, 47, { align: 'center' });
+  pdf.text(`${t(labels.dateRange)}: ${dateRange}`, pageWidth / 2, 53, { align: 'center' });
   
   let yPos = 62;
   const align = isArabic ? 'right' : 'left';
@@ -511,14 +517,14 @@ export const generateUnitPerformancePDF = async (
   const totalExpenses = units.reduce((s, u) => s + u.totalExpenses, 0);
   const netProfit = totalRevenue - totalExpenses;
   
-  // Summary
-  const summaryRows: [string, string][] = [[labels.totalRevenue, formatEGP(totalRevenue)]];
+  // Summary - with text shaping
+  const summaryRows: [string, string][] = [[t(labels.totalRevenue), formatEGP(totalRevenue)]];
   if (housekeepingTotal > 0) {
-    summaryRows.push([labels.housekeeping, formatEGP(housekeepingTotal)]);
+    summaryRows.push([t(labels.housekeeping), formatEGP(housekeepingTotal)]);
   }
   summaryRows.push(
-    [labels.totalExpenses, formatEGP(totalExpenses)],
-    [labels.netProfit, formatEGP(netProfit)]
+    [t(labels.totalExpenses), formatEGP(totalExpenses)],
+    [t(labels.netProfit), formatEGP(netProfit)]
   );
   
   autoTable(pdf, {
@@ -545,8 +551,8 @@ export const generateUnitPerformancePDF = async (
   
   yPos = (pdf as any).lastAutoTable.finalY + 15;
   
-  // Units table
-  const headCols = [labels.unit, labels.type, labels.totalRevenue, labels.totalExpenses, labels.netProfit];
+  // Units table - headers shaped
+  const headCols = [t(labels.unit), t(labels.type), t(labels.totalRevenue), t(labels.totalExpenses), t(labels.netProfit)];
   const headRow = isArabic ? [...headCols].reverse() : headCols;
   
   autoTable(pdf, {
@@ -554,7 +560,7 @@ export const generateUnitPerformancePDF = async (
     head: [headRow],
     body: units.map((u) => {
       const row = [
-        `${getUnitTypeEmoji(u.unitType)} ${u.unitName}`,
+        `${getUnitTypeEmoji(u.unitType)} ${t(u.unitName)}`,
         u.unitType,
         formatEGP(u.totalRevenue),
         formatEGP(u.totalExpenses),
@@ -570,9 +576,9 @@ export const generateUnitPerformancePDF = async (
     showHead: 'everyPage',
     didDrawPage: (hookData) => {
       if (hookData.pageNumber > 1) {
-        drawBrandHeader(pdf, labels.title, labels.unitPerformance, isArabic);
+        drawBrandHeader(pdf, t(labels.title), t(labels.unitPerformance), isArabic);
       }
-      drawPageFooter(pdf, labels.thanks, `${labels.page} ${hookData.pageNumber} ${labels.of} ${totalPagesPlaceholder}`);
+      drawPageFooter(pdf, t(labels.thanks), `${t(labels.page)} ${hookData.pageNumber} ${t(labels.of)} ${totalPagesPlaceholder}`);
     },
     didParseCell: (hookData) => {
       // Color the Net Profit column
