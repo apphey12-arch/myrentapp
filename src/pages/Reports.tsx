@@ -19,16 +19,22 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarIcon, FileText, Loader2, TrendingUp, Calendar as CalendarIconLucide, DollarSign, Building2 } from 'lucide-react';
+import { CalendarIcon, Loader2, TrendingUp, Calendar as CalendarIconLucide, DollarSign, Building2, FileText } from 'lucide-react';
 import { format, parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { formatEGP, formatEGPCompact } from '@/lib/currency';
 import { formatDateRange } from '@/lib/date-utils';
-import { generateReportPDF, generateUnitPerformancePDF, UnitPerformanceData } from '@/lib/pdf-generator';
 import { DateRange } from 'react-day-picker';
-import { useLanguage, Language } from '@/contexts/LanguageContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { getUnitTypeEmoji } from '@/types/database';
-import { PdfLanguageModal } from '@/components/pdf/PdfLanguageModal';
+
+interface UnitPerformanceData {
+  unitName: string;
+  unitType: string;
+  totalRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
+}
 
 const ReportsPage = () => {
   const { t } = useLanguage();
@@ -37,8 +43,6 @@ const ReportsPage = () => {
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date()),
   });
-  const [pdfModalOpen, setPdfModalOpen] = useState(false);
-  const [unitPdfModalOpen, setUnitPdfModalOpen] = useState(false);
 
   const { units, isLoading: unitsLoading } = useUnits();
   const { bookings, isLoading: bookingsLoading } = useBookings();
@@ -76,8 +80,6 @@ const ReportsPage = () => {
     // Revenue = Base Rent only (Daily Rate * Days). Housekeeping is pass-through.
     const totalRevenue = activeBookings.reduce((sum, b) => sum + (Number(b.daily_rate) * Number(b.duration_days)), 0);
 
-    const housekeepingTotal = activeBookings.reduce((sum, b) => sum + Number(b.housekeeping_amount || 0), 0);
-
     const occupiedDays = activeBookings.reduce(
       (sum, b) => sum + b.duration_days,
       0
@@ -89,7 +91,6 @@ const ReportsPage = () => {
 
     return {
       totalRevenue,
-      housekeepingTotal,
       totalBookings: filteredBookings.length,
       occupiedDays,
       avgDailyRate,
@@ -117,47 +118,6 @@ const ReportsPage = () => {
       };
     });
   }, [units, bookings, expenses]);
-
-  const handleExportPDF = async (language: Language) => {
-    const activeBookings = filteredBookings.filter(b => b.status !== 'Cancelled');
-    
-    await generateReportPDF({
-      dateRange: dateRange?.from && dateRange?.to
-        ? `${format(dateRange.from, 'MMM d, yyyy')} - ${format(dateRange.to, 'MMM d, yyyy')}`
-        : 'All Time',
-      unitScope: unitFilter === 'all' 
-        ? 'All Units' 
-        : units.find(u => u.id === unitFilter)?.name || 'Unknown',
-      totalRevenue: stats.totalRevenue,
-      housekeepingTotal: stats.housekeepingTotal,
-      totalExpenses: 0, // Removed from general report
-      netIncome: stats.totalRevenue,
-      totalBookings: stats.totalBookings,
-      occupiedDays: stats.occupiedDays,
-      averageDailyRate: stats.avgDailyRate,
-      bookings: activeBookings.map(b => ({
-        unitName: b.unit?.name || 'Unknown',
-        tenantName: b.tenant_name,
-        dates: formatDateRange(b.start_date, b.end_date),
-        // Amount in this report = Base Rent only
-        amount: Number(b.daily_rate) * Number(b.duration_days),
-        status: b.status,
-        paymentStatus: b.payment_status || 'Pending',
-      })),
-    }, language);
-  };
-
-  const handleExportUnitPDF = async (language: Language) => {
-    const rangeString = dateRange?.from && dateRange?.to
-      ? `${format(dateRange.from, 'MMM d, yyyy')} - ${format(dateRange.to, 'MMM d, yyyy')}`
-      : 'All Time';
-
-    const housekeepingTotal = bookings
-      .filter(b => b.status !== 'Cancelled')
-      .reduce((sum, b) => sum + Number(b.housekeeping_amount || 0), 0);
-    
-    await generateUnitPerformancePDF(unitPerformanceData, rangeString, housekeepingTotal, language);
-  };
 
   return (
     <AppLayout>
@@ -257,13 +217,6 @@ const ReportsPage = () => {
               </div>
             ) : (
               <>
-                <div className="flex justify-end mb-4">
-                  <Button onClick={() => setPdfModalOpen(true)} className="gradient-ocean gap-2">
-                    <FileText className="h-4 w-4" />
-                    Export PDF Report
-                  </Button>
-                </div>
-
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
                   <Card className="shadow-soft">
                     <CardContent className="p-6">
@@ -387,99 +340,57 @@ const ReportsPage = () => {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              <>
-                <div className="flex justify-end mb-4">
-                  <Button onClick={() => setUnitPdfModalOpen(true)} className="gradient-ocean gap-2">
-                    <FileText className="h-4 w-4" />
-                    Export Profit Report
-                  </Button>
-                </div>
-
-                <Card className="shadow-soft">
-                  <CardHeader>
-                    <CardTitle>Unit Financials</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {unitPerformanceData.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        No units found. Add units to see performance data.
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="border-b">
-                              <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('unit')}</th>
-                              <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('type')}</th>
-                              <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t('totalRevenue')}</th>
-                              <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t('totalExpenses')}</th>
-                              <th className="text-right py-3 px-4 font-medium text-muted-foreground">Net Profit</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {unitPerformanceData.map((unit, index) => (
-                              <tr key={index} className="border-b hover:bg-secondary/30 transition-colors">
-                                <td className="py-3 px-4 font-medium">
-                                  {getUnitTypeEmoji(unit.unitType)} {unit.unitName}
-                                </td>
-                                <td className="py-3 px-4 text-muted-foreground">{unit.unitType}</td>
-                                <td className="py-3 px-4 text-right text-success font-medium">
-                                  {formatEGP(unit.totalRevenue)}
-                                </td>
-                                <td className="py-3 px-4 text-right text-destructive font-medium">
-                                  {formatEGP(unit.totalExpenses)}
-                                </td>
-                                <td className={cn(
-                                  "py-3 px-4 text-right font-bold",
-                                  unit.netProfit >= 0 ? "text-success" : "text-destructive"
-                                )}>
-                                  {unit.netProfit >= 0 ? '+' : ''}{formatEGP(unit.netProfit)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="bg-secondary/50 font-bold">
-                              <td className="py-3 px-4" colSpan={2}>Total</td>
-                              <td className="py-3 px-4 text-right text-success">
-                                {formatEGP(unitPerformanceData.reduce((sum, u) => sum + u.totalRevenue, 0))}
+              <Card className="shadow-soft">
+                <CardHeader>
+                  <CardTitle>Unit Financials</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {unitPerformanceData.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No units found. Add units to see performance data.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('unit')}</th>
+                            <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('type')}</th>
+                            <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t('totalRevenue')}</th>
+                            <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t('totalExpenses')}</th>
+                            <th className="text-right py-3 px-4 font-medium text-muted-foreground">Net Profit</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {unitPerformanceData.map((unit) => (
+                            <tr key={unit.unitName} className="border-b hover:bg-secondary/30 transition-colors">
+                              <td className="py-3 px-4 font-medium">
+                                {getUnitTypeEmoji(unit.unitType as any)} {unit.unitName}
                               </td>
-                              <td className="py-3 px-4 text-right text-destructive">
-                                {formatEGP(unitPerformanceData.reduce((sum, u) => sum + u.totalExpenses, 0))}
+                              <td className="py-3 px-4 text-muted-foreground">{unit.unitType}</td>
+                              <td className="py-3 px-4 text-right text-success font-semibold">
+                                {formatEGP(unit.totalRevenue)}
+                              </td>
+                              <td className="py-3 px-4 text-right text-destructive font-semibold">
+                                {formatEGP(unit.totalExpenses)}
                               </td>
                               <td className={cn(
-                                "py-3 px-4 text-right",
-                                unitPerformanceData.reduce((sum, u) => sum + u.netProfit, 0) >= 0 ? "text-success" : "text-destructive"
+                                "py-3 px-4 text-right font-bold",
+                                unit.netProfit >= 0 ? "text-success" : "text-destructive"
                               )}>
-                                {unitPerformanceData.reduce((sum, u) => sum + u.netProfit, 0) >= 0 ? '+' : ''}
-                                {formatEGP(unitPerformanceData.reduce((sum, u) => sum + u.netProfit, 0))}
+                                {unit.netProfit >= 0 ? '+' : ''}{formatEGP(unit.netProfit)}
                               </td>
                             </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
           </TabsContent>
         </Tabs>
-
-        {/* PDF Language Selection Modals */}
-        <PdfLanguageModal
-          open={pdfModalOpen}
-          onOpenChange={setPdfModalOpen}
-          onConfirm={handleExportPDF}
-          title="Export PDF Report"
-        />
-        
-        <PdfLanguageModal
-          open={unitPdfModalOpen}
-          onOpenChange={setUnitPdfModalOpen}
-          onConfirm={handleExportUnitPDF}
-          title="Export Unit Performance Report"
-        />
       </div>
     </AppLayout>
   );
