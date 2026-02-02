@@ -72,11 +72,11 @@ const ReportsPage = () => {
   // Calculate stats
   const stats = useMemo(() => {
     const activeBookings = filteredBookings.filter(b => b.status !== 'Cancelled');
-    
-    const totalRevenue = activeBookings.reduce(
-      (sum, b) => sum + Number(b.total_amount),
-      0
-    );
+
+    // Revenue = Base Rent only (Daily Rate * Days). Housekeeping is pass-through.
+    const totalRevenue = activeBookings.reduce((sum, b) => sum + (Number(b.daily_rate) * Number(b.duration_days)), 0);
+
+    const housekeepingTotal = activeBookings.reduce((sum, b) => sum + Number(b.housekeeping_amount || 0), 0);
 
     const occupiedDays = activeBookings.reduce(
       (sum, b) => sum + b.duration_days,
@@ -89,6 +89,7 @@ const ReportsPage = () => {
 
     return {
       totalRevenue,
+      housekeepingTotal,
       totalBookings: filteredBookings.length,
       occupiedDays,
       avgDailyRate,
@@ -101,7 +102,7 @@ const ReportsPage = () => {
     return units.map(unit => {
       // Revenue from this unit
       const unitBookings = bookings.filter(b => b.unit_id === unit.id && b.status !== 'Cancelled');
-      const totalRevenue = unitBookings.reduce((sum, b) => sum + Number(b.total_amount), 0);
+      const totalRevenue = unitBookings.reduce((sum, b) => sum + (Number(b.daily_rate) * Number(b.duration_days)), 0);
       
       // Expenses for this unit
       const unitExpenses = expenses.filter(e => e.unit_id === unit.id);
@@ -128,6 +129,7 @@ const ReportsPage = () => {
         ? 'All Units' 
         : units.find(u => u.id === unitFilter)?.name || 'Unknown',
       totalRevenue: stats.totalRevenue,
+      housekeepingTotal: stats.housekeepingTotal,
       totalExpenses: 0, // Removed from general report
       netIncome: stats.totalRevenue,
       totalBookings: stats.totalBookings,
@@ -137,7 +139,8 @@ const ReportsPage = () => {
         unitName: b.unit?.name || 'Unknown',
         tenantName: b.tenant_name,
         dates: formatDateRange(b.start_date, b.end_date),
-        amount: b.total_amount,
+        // Amount in this report = Base Rent only
+        amount: Number(b.daily_rate) * Number(b.duration_days),
         status: b.status,
         paymentStatus: b.payment_status || 'Pending',
       })),
@@ -148,8 +151,12 @@ const ReportsPage = () => {
     const rangeString = dateRange?.from && dateRange?.to
       ? `${format(dateRange.from, 'MMM d, yyyy')} - ${format(dateRange.to, 'MMM d, yyyy')}`
       : 'All Time';
+
+    const housekeepingTotal = bookings
+      .filter(b => b.status !== 'Cancelled')
+      .reduce((sum, b) => sum + Number(b.housekeeping_amount || 0), 0);
     
-    await generateUnitPerformancePDF(unitPerformanceData, rangeString, language);
+    await generateUnitPerformancePDF(unitPerformanceData, rangeString, housekeepingTotal, language);
   };
 
   return (

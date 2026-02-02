@@ -4,9 +4,7 @@ import { formatEGP } from './currency';
 import { BookingStatus, UnitType, PaymentStatus, getUnitTypeEmoji } from '@/types/database';
 import { Language } from '@/contexts/LanguageContext';
 
-// Amiri font embedded as Base64 (subset for Arabic support)
-// This is a minimal subset that supports Arabic numerals and common characters
-const AMIRI_FONT_BASE64 = `AAEAAAAPAIAAAwBwT1MvMlYJXhkAAAD8AAAAVmNtYXDb+xEsAAABVAAAAUpjdnQgAAAAAAAAAsAAAAACZ2FzcP//AAMAAALEAAAACGdseWZ5`; // Placeholder - will load dynamically
+import { applyArabicFont } from '@/lib/pdf/pdf-font';
 
 // PDF text labels in both languages
 const pdfLabels = {
@@ -102,72 +100,32 @@ const pdfLabels = {
   },
 };
 
-// Load Arabic font dynamically
-const loadArabicFont = async (): Promise<string> => {
-  try {
-    // Use Amiri font for better Arabic support
-    const response = await fetch('https://fonts.gstatic.com/s/amiri/v27/J7aRnpd8CGxBHpUrtLMA7w.ttf');
-    const blob = await response.blob();
-    
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = (reader.result as string).split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    console.error('Failed to load Arabic font:', error);
-    throw error;
-  }
-};
-
-// Setup PDF with Arabic font
-const setupPdfWithFont = async (pdf: jsPDF, isArabic: boolean): Promise<void> => {
+// Setup PDF with embedded Arabic font (no runtime fetching)
+const setupPdfWithFont = (pdf: jsPDF, isArabic: boolean): void => {
   if (isArabic) {
-    try {
-      const fontBase64 = await loadArabicFont();
-      pdf.addFileToVFS('Amiri-Regular.ttf', fontBase64);
-      pdf.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
-      pdf.setFont('Amiri');
-    } catch (error) {
-      console.error('Failed to setup Arabic font, falling back to default:', error);
-      pdf.setFont('helvetica');
-    }
+    applyArabicFont(pdf);
   } else {
-    pdf.setFont('helvetica');
+    (pdf as any).setR2L?.(false);
+    pdf.setFont('helvetica', 'normal');
   }
 };
 
-// Reverse Arabic text for RTL rendering in jsPDF
-const processArabicText = (text: string, isArabic: boolean): string => {
-  if (!isArabic) return text;
-  // jsPDF doesn't handle RTL well, so we need to reverse the text order
-  return text.split('').reverse().join('');
-};
-
-// Add header to PDF page
-const addPdfHeader = (pdf: jsPDF, title: string, subtitle: string, isArabic: boolean) => {
+// Add header to PDF page (clean, professional layout)
+const addPdfHeader = (pdf: jsPDF, title: string, subtitle: string) => {
   const pageWidth = pdf.internal.pageSize.getWidth();
-  
-  // Header background
-  pdf.setFillColor(14, 116, 144); // Primary cyan
-  pdf.rect(0, 0, pageWidth, 40, 'F');
-  
-  // Title
-  pdf.setTextColor(255, 255, 255);
-  pdf.setFontSize(22);
-  const titleText = isArabic ? processArabicText(title, true) : title;
-  pdf.text(titleText, pageWidth / 2, 18, { align: 'center' });
-  
-  // Subtitle
-  pdf.setFontSize(12);
-  const subtitleText = isArabic ? processArabicText(subtitle, true) : subtitle;
-  pdf.text(subtitleText, pageWidth / 2, 30, { align: 'center' });
-  
-  pdf.setTextColor(0, 0, 0);
+
+  pdf.setTextColor(20, 20, 20);
+  pdf.setFontSize(20);
+  pdf.text(title, pageWidth / 2, 18, { align: 'center' });
+
+  pdf.setFontSize(11);
+  pdf.setTextColor(90, 90, 90);
+  pdf.text(subtitle, pageWidth / 2, 28, { align: 'center' });
+
+  // Divider
+  pdf.setDrawColor(210, 210, 210);
+  pdf.setLineWidth(0.6);
+  pdf.line(15, 35, pageWidth - 15, 35);
 };
 
 // Add page number footer
@@ -203,15 +161,17 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   
   const baseAmount = data.dailyRate * data.durationDays;
   const housekeepingAmount = data.housekeepingAmount || 0;
-  const totalRent = baseAmount + housekeepingAmount;
+  const totalRent = baseAmount; // Total Rent is Base Rent ONLY
+  const grandTotal = baseAmount + housekeepingAmount;
   
   const pdf = new jsPDF('p', 'mm', 'a4');
-  await setupPdfWithFont(pdf, isArabic);
+  setupPdfWithFont(pdf, isArabic);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
+  const marginX = 15;
   
   // Header
-  addPdfHeader(pdf, labels.title, labels.subtitle, isArabic);
+  addPdfHeader(pdf, labels.title, labels.subtitle);
   
   // Date
   pdf.setFontSize(10);
@@ -220,128 +180,142 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   pdf.text(dateText, pageWidth / 2, 50, { align: 'center' });
   
   let yPos = 60;
+
+  const kvRows = (rows: Array<[string, string]>) =>
+    isArabic ? rows.map(([k, v]) => [v, k]) : rows;
+
+  const kvColumnStyles = isArabic
+    ? {
+        0: { cellWidth: 'auto', halign: 'right' },
+        1: { fontStyle: 'bold', cellWidth: 55, textColor: [100, 100, 100], halign: 'right' },
+      }
+    : {
+        0: { fontStyle: 'bold', cellWidth: 55, textColor: [100, 100, 100] },
+        1: { cellWidth: 'auto' },
+      };
   
   // Tenant Info Section
   pdf.setFontSize(14);
-  pdf.setTextColor(14, 116, 144);
-  pdf.text(isArabic ? processArabicText(labels.tenantInfo, true) : labels.tenantInfo, isArabic ? pageWidth - 15 : 15, yPos);
+  pdf.setTextColor(20, 20, 20);
+  pdf.text(labels.tenantInfo, isArabic ? pageWidth - marginX : marginX, yPos, { align: isArabic ? 'right' : 'left' });
   yPos += 5;
   
-  pdf.setDrawColor(14, 116, 144);
+  pdf.setDrawColor(210, 210, 210);
   pdf.setLineWidth(0.5);
-  pdf.line(15, yPos, pageWidth - 15, yPos);
+  pdf.line(marginX, yPos, pageWidth - marginX, yPos);
   yPos += 10;
   
   // Tenant details table
   autoTable(pdf, {
     startY: yPos,
     head: [],
-    body: [
+    body: kvRows([
       [labels.name, data.tenantName],
-      [labels.phone, data.phoneNumber || 'N/A'],
+      [labels.phone, data.phoneNumber || '—'],
       [labels.status, data.status],
       [labels.payment, data.paymentStatus || 'Pending'],
-    ],
-    theme: 'plain',
+    ]),
+    theme: 'grid',
     styles: {
       fontSize: 11,
       cellPadding: 4,
+      overflow: 'linebreak',
+      halign: isArabic ? 'right' : 'left',
     },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 50, textColor: [100, 100, 100] },
-      1: { cellWidth: 'auto' },
-    },
-    margin: { left: 15, right: 15 },
+    columnStyles: kvColumnStyles as any,
+    margin: { left: marginX, right: marginX },
   });
   
   yPos = (pdf as any).lastAutoTable.finalY + 15;
   
   // Property Details Section
   pdf.setFontSize(14);
-  pdf.setTextColor(14, 116, 144);
-  pdf.text(isArabic ? processArabicText(labels.propertyDetails, true) : labels.propertyDetails, isArabic ? pageWidth - 15 : 15, yPos);
+  pdf.setTextColor(20, 20, 20);
+  pdf.text(labels.propertyDetails, isArabic ? pageWidth - marginX : marginX, yPos, { align: isArabic ? 'right' : 'left' });
   yPos += 5;
   
-  pdf.line(15, yPos, pageWidth - 15, yPos);
+  pdf.line(marginX, yPos, pageWidth - marginX, yPos);
   yPos += 10;
   
   autoTable(pdf, {
     startY: yPos,
     head: [],
-    body: [
+    body: kvRows([
       [labels.unit, `${getUnitTypeEmoji(data.unitType)} ${data.unitName}`],
       [labels.type, data.unitType],
       [labels.checkIn, data.startDate],
       [labels.checkOut, data.endDate],
       [labels.duration, `${data.durationDays} ${labels.days}`],
-    ],
-    theme: 'plain',
+    ]),
+    theme: 'grid',
     styles: {
       fontSize: 11,
       cellPadding: 4,
+      overflow: 'linebreak',
+      halign: isArabic ? 'right' : 'left',
     },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 50, textColor: [100, 100, 100] },
-      1: { cellWidth: 'auto' },
-    },
-    margin: { left: 15, right: 15 },
+    columnStyles: kvColumnStyles as any,
+    margin: { left: marginX, right: marginX },
   });
   
   yPos = (pdf as any).lastAutoTable.finalY + 15;
   
   // Pricing Section
   pdf.setFontSize(14);
-  pdf.setTextColor(14, 116, 144);
-  pdf.text(isArabic ? processArabicText(labels.pricing, true) : labels.pricing, isArabic ? pageWidth - 15 : 15, yPos);
+  pdf.setTextColor(20, 20, 20);
+  pdf.text(labels.pricing, isArabic ? pageWidth - marginX : marginX, yPos, { align: isArabic ? 'right' : 'left' });
   yPos += 5;
   
-  pdf.line(15, yPos, pageWidth - 15, yPos);
+  pdf.line(marginX, yPos, pageWidth - marginX, yPos);
   yPos += 10;
   
-  const pricingData: (string | number)[][] = [
-    [labels.description, labels.amount],
-    [`${labels.dailyRate} × ${data.durationDays} ${labels.days}`, formatEGP(baseAmount)],
+  const pricingRows: Array<[string, string]> = [
+    [`${labels.baseAmount}`, formatEGP(baseAmount)],
   ];
-  
-  if (housekeepingAmount > 0) {
-    pricingData.push([labels.housekeeping, formatEGP(housekeepingAmount)]);
-  }
-  
-  pricingData.push([labels.totalRent, formatEGP(totalRent)]);
-  
+  if (housekeepingAmount > 0) pricingRows.push([labels.housekeeping, formatEGP(housekeepingAmount)]);
+
+  // Total Rent = Base Rent only
+  pricingRows.push([labels.totalRent, formatEGP(totalRent)]);
+  // Grand Total = Base + Housekeeping
+  pricingRows.push([labels.grandTotal, formatEGP(grandTotal)]);
+
   if (data.depositAmount && data.depositAmount > 0) {
-    pricingData.push([`${labels.refundableDeposit} *`, formatEGP(data.depositAmount)]);
+    pricingRows.push([`${labels.refundableDeposit} *`, formatEGP(data.depositAmount)]);
   }
   
   autoTable(pdf, {
     startY: yPos,
     head: [[labels.description, labels.amount]],
-    body: pricingData.slice(1),
-    theme: 'striped',
+    body: (isArabic ? pricingRows.map(([k, v]) => [v, k]) : pricingRows) as any,
+    theme: 'grid',
     styles: {
       fontSize: 11,
       cellPadding: 5,
+      overflow: 'linebreak',
+      halign: isArabic ? 'right' : 'left',
     },
     headStyles: {
-      fillColor: [14, 116, 144],
-      textColor: [255, 255, 255],
+      fillColor: [245, 245, 245],
+      textColor: [40, 40, 40],
       fontStyle: 'bold',
     },
     columnStyles: {
-      0: { cellWidth: 'auto' },
-      1: { cellWidth: 50, halign: 'right' },
+      0: { cellWidth: 'auto', halign: isArabic ? 'right' : 'left' },
+      1: { cellWidth: 55, halign: 'right' },
     },
-    margin: { left: 15, right: 15 },
+    margin: { left: marginX, right: marginX },
     didParseCell: (data) => {
-      // Highlight total row
-      if (data.row.index === pricingData.length - 3 || 
-          (data.row.raw && (data.row.raw as string[])[0]?.includes(labels.totalRent))) {
-        data.cell.styles.fillColor = [254, 243, 199];
+      const raw0 = (data.row.raw as any)?.[0] as string | undefined;
+      const raw1 = (data.row.raw as any)?.[1] as string | undefined;
+      const labelCell = isArabic ? raw1 : raw0;
+
+      // Highlight Total Rent and Grand Total rows
+      if (labelCell?.includes(labels.totalRent) || labelCell?.includes(labels.grandTotal)) {
         data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.textColor = [146, 64, 14];
+        data.cell.styles.fillColor = [250, 250, 250];
       }
       // Style deposit row
-      if (data.row.raw && (data.row.raw as string[])[0]?.includes('*')) {
+      if (labelCell?.includes('*')) {
         data.cell.styles.fontStyle = 'italic';
         data.cell.styles.textColor = [100, 100, 100];
       }
@@ -361,7 +335,7 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   // Footer
   const pageHeight = pdf.internal.pageSize.getHeight();
   pdf.setDrawColor(200, 200, 200);
-  pdf.line(15, pageHeight - 25, pageWidth - 15, pageHeight - 25);
+  pdf.line(marginX, pageHeight - 25, pageWidth - marginX, pageHeight - 25);
   
   pdf.setFontSize(11);
   pdf.setTextColor(100, 100, 100);
@@ -374,6 +348,7 @@ interface ReportData {
   dateRange: string;
   unitScope: string;
   totalRevenue: number;
+  housekeepingTotal?: number;
   totalExpenses: number;
   netIncome: number;
   totalBookings: number;
@@ -394,13 +369,15 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
   const isArabic = language === 'ar';
   
   const pdf = new jsPDF('p', 'mm', 'a4');
-  await setupPdfWithFont(pdf, isArabic);
+  setupPdfWithFont(pdf, isArabic);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
+  const marginX = 15;
+  const totalPagesExp = '{total_pages_count_string}';
   
   // Header
-  addPdfHeader(pdf, labels.title, labels.reportTitle, isArabic);
+  addPdfHeader(pdf, labels.title, labels.reportTitle);
   
   // Date and filters
   pdf.setFontSize(10);
@@ -411,35 +388,71 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
   let yPos = 70;
   
   // Summary Stats
-  const statsData = [
+  const statsData: Array<[string, string]> = [
     [labels.totalRevenue, formatEGP(data.totalRevenue)],
+  ];
+  if (typeof data.housekeepingTotal === 'number' && data.housekeepingTotal > 0) {
+    statsData.push([labels.housekeeping, formatEGP(data.housekeepingTotal)]);
+  }
+  statsData.push(
     [labels.totalBookings, data.totalBookings.toString()],
     [labels.occupiedDays, `${data.occupiedDays} ${labels.days}`],
-    [labels.avgDailyRate, formatEGP(data.averageDailyRate)],
-  ];
+    [labels.avgDailyRate, formatEGP(data.averageDailyRate)]
+  );
   
   autoTable(pdf, {
     startY: yPos,
     head: [],
-    body: statsData,
-    theme: 'plain',
+    body: (isArabic ? statsData.map(([k, v]) => [v, k]) : statsData) as any,
+    theme: 'grid',
     styles: {
       fontSize: 12,
       cellPadding: 6,
+      overflow: 'linebreak',
+      halign: isArabic ? 'right' : 'left',
     },
     columnStyles: {
-      0: { fontStyle: 'bold', textColor: [100, 100, 100] },
-      1: { fontStyle: 'bold', halign: 'right', textColor: [14, 116, 144] },
+      0: isArabic ? { fontStyle: 'bold', halign: 'right' } : { fontStyle: 'bold', textColor: [100, 100, 100] },
+      1: isArabic
+        ? { fontStyle: 'bold', textColor: [100, 100, 100], halign: 'right' }
+        : { fontStyle: 'bold', halign: 'right' },
     },
-    margin: { left: 15, right: 15 },
+    margin: { left: marginX, right: marginX },
   });
   
   yPos = (pdf as any).lastAutoTable.finalY + 15;
   
   // Bookings table with auto-pagination
+  const drawHeaderAndFooter = (pageNumber: number) => {
+    addPdfHeader(pdf, labels.title, labels.reportTitle);
+    pdf.setFontSize(10);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text(
+      `${labels.generated}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`,
+      pageWidth / 2,
+      50,
+      { align: 'center' }
+    );
+    pdf.text(
+      `${labels.dateRange}: ${data.dateRange} | ${labels.scope}: ${data.unitScope}`,
+      pageWidth / 2,
+      57,
+      { align: 'center' }
+    );
+
+    pdf.setFontSize(10);
+    pdf.setTextColor(130, 130, 130);
+    pdf.text(
+      `${labels.page} ${pageNumber} ${labels.of} ${totalPagesExp}`,
+      pageWidth / 2,
+      pageHeight - 10,
+      { align: 'center' }
+    );
+  };
+
   pdf.setFontSize(14);
-  pdf.setTextColor(14, 116, 144);
-  pdf.text(labels.totalBookings, 15, yPos);
+  pdf.setTextColor(20, 20, 20);
+  pdf.text(labels.totalBookings, marginX, yPos);
   yPos += 8;
   
   autoTable(pdf, {
@@ -453,28 +466,26 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
       b.status,
       b.paymentStatus,
     ]),
-    theme: 'striped',
+    theme: 'grid',
     styles: {
       fontSize: 9,
       cellPadding: 4,
+      overflow: 'linebreak',
+      halign: isArabic ? 'right' : 'left',
     },
     headStyles: {
-      fillColor: [14, 116, 144],
-      textColor: [255, 255, 255],
+      fillColor: [245, 245, 245],
+      textColor: [40, 40, 40],
       fontStyle: 'bold',
     },
-    margin: { left: 15, right: 15 },
+    margin: { left: marginX, right: marginX },
     // Auto-pagination: this will automatically create new pages
     showHead: 'everyPage',
-    didDrawPage: (data) => {
-      // Add page number to each page
-      const pageCount = pdf.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        pdf.setPage(i);
-        addPageNumber(pdf, i, pageCount, labels);
-      }
-    },
+    didDrawPage: (hookData) => drawHeaderAndFooter(hookData.pageNumber),
   });
+
+  // Replace total pages placeholder
+  (pdf as any).putTotalPages?.(totalPagesExp);
   
   // Footer on last page
   const lastPage = pdf.getNumberOfPages();
@@ -498,19 +509,22 @@ export interface UnitPerformanceData {
 export const generateUnitPerformancePDF = async (
   units: UnitPerformanceData[],
   dateRange: string,
+  housekeepingTotal: number = 0,
   language: Language = 'en'
 ) => {
   const labels = pdfLabels[language];
   const isArabic = language === 'ar';
   
   const pdf = new jsPDF('p', 'mm', 'a4');
-  await setupPdfWithFont(pdf, isArabic);
+  setupPdfWithFont(pdf, isArabic);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
+  const marginX = 15;
+  const totalPagesExp = '{total_pages_count_string}';
   
   // Header
-  addPdfHeader(pdf, labels.title, labels.unitPerformance, isArabic);
+  addPdfHeader(pdf, labels.title, labels.unitPerformance);
   
   // Date
   pdf.setFontSize(10);
@@ -525,29 +539,39 @@ export const generateUnitPerformancePDF = async (
   const totalExpenses = units.reduce((sum, u) => sum + u.totalExpenses, 0);
   const totalNetProfit = totalRevenue - totalExpenses;
   
-  // Summary
+  // Summary (Revenue excludes housekeeping; housekeeping is pass-through)
+  const summaryRows: Array<[string, string]> = [
+    [labels.totalRevenue, formatEGP(totalRevenue)],
+  ];
+  if (housekeepingTotal > 0) summaryRows.push([labels.housekeeping, formatEGP(housekeepingTotal)]);
+  summaryRows.push(
+    [labels.totalExpenses, formatEGP(totalExpenses)],
+    [labels.netProfit, formatEGP(totalNetProfit)]
+  );
+
   autoTable(pdf, {
     startY: yPos,
     head: [],
-    body: [
-      [labels.totalRevenue, formatEGP(totalRevenue)],
-      [labels.totalExpenses, formatEGP(totalExpenses)],
-      [labels.netProfit, formatEGP(totalNetProfit)],
-    ],
-    theme: 'plain',
+    body: (isArabic ? summaryRows.map(([k, v]) => [v, k]) : summaryRows) as any,
+    theme: 'grid',
     styles: {
       fontSize: 12,
       cellPadding: 6,
+      overflow: 'linebreak',
+      halign: isArabic ? 'right' : 'left',
     },
     columnStyles: {
-      0: { fontStyle: 'bold', textColor: [100, 100, 100] },
+      0: isArabic ? { fontStyle: 'bold', halign: 'right' } : { fontStyle: 'bold', textColor: [100, 100, 100] },
       1: { fontStyle: 'bold', halign: 'right' },
     },
-    margin: { left: 15, right: 15 },
+    margin: { left: marginX, right: marginX },
     didParseCell: (data) => {
       if (data.row.index === 0) {
         data.cell.styles.textColor = [22, 163, 74]; // Green for revenue
       } else if (data.row.index === 1) {
+        // housekeeping row (neutral)
+        data.cell.styles.textColor = [100, 100, 100];
+      } else if (data.row.index === 2) {
         data.cell.styles.textColor = [220, 38, 38]; // Red for expenses
       } else if (data.row.index === 2 && data.column.index === 1) {
         data.cell.styles.textColor = totalNetProfit >= 0 ? [22, 163, 74] : [220, 38, 38];
@@ -558,6 +582,18 @@ export const generateUnitPerformancePDF = async (
   yPos = (pdf as any).lastAutoTable.finalY + 20;
   
   // Units performance table
+  const drawHeaderAndFooter = (pageNumber: number) => {
+    addPdfHeader(pdf, labels.title, labels.unitPerformance);
+    pdf.setFontSize(10);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text(`${labels.generated}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`, pageWidth / 2, 50, { align: 'center' });
+    pdf.text(`${labels.dateRange}: ${dateRange}`, pageWidth / 2, 57, { align: 'center' });
+
+    pdf.setFontSize(10);
+    pdf.setTextColor(130, 130, 130);
+    pdf.text(`${labels.page} ${pageNumber} ${labels.of} ${totalPagesExp}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+  };
+
   autoTable(pdf, {
     startY: yPos,
     head: [[labels.unit, labels.type, labels.totalRevenue, labels.totalExpenses, labels.netProfit]],
@@ -568,18 +604,21 @@ export const generateUnitPerformancePDF = async (
       formatEGP(u.totalExpenses),
       formatEGP(u.netProfit),
     ]),
-    theme: 'striped',
+    theme: 'grid',
     styles: {
       fontSize: 10,
       cellPadding: 5,
+      overflow: 'linebreak',
+      halign: isArabic ? 'right' : 'left',
     },
     headStyles: {
-      fillColor: [14, 116, 144],
-      textColor: [255, 255, 255],
+      fillColor: [245, 245, 245],
+      textColor: [40, 40, 40],
       fontStyle: 'bold',
     },
-    margin: { left: 15, right: 15 },
+    margin: { left: marginX, right: marginX },
     showHead: 'everyPage',
+    didDrawPage: (hookData) => drawHeaderAndFooter(hookData.pageNumber),
     didParseCell: (data) => {
       // Color net profit column
       if (data.column.index === 4 && data.section === 'body') {
@@ -591,13 +630,10 @@ export const generateUnitPerformancePDF = async (
       }
     },
   });
-  
-  // Page numbers
+
+  (pdf as any).putTotalPages?.(totalPagesExp);
+
   const pageCount = pdf.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    pdf.setPage(i);
-    addPageNumber(pdf, i, pageCount, labels);
-  }
   
   // Footer
   pdf.setPage(pageCount);
