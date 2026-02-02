@@ -3,10 +3,12 @@ import autoTable from 'jspdf-autotable';
 import { formatEGP } from './currency';
 import { BookingStatus, UnitType, PaymentStatus, getUnitTypeEmoji } from '@/types/database';
 import { Language } from '@/contexts/LanguageContext';
+import { setupPdfLanguage } from '@/lib/pdf/amiri-font-loader';
 
-import { setupPdfForLanguage } from '@/lib/pdf/runtime-font';
+// ============================================================================
+// PDF Text Labels (Bilingual)
+// ============================================================================
 
-// PDF text labels in both languages
 const pdfLabels = {
   en: {
     title: 'Sunlight Village',
@@ -26,7 +28,7 @@ const pdfLabels = {
     checkOut: 'Check-out Date',
     duration: 'Duration',
     days: 'day(s)',
-    pricing: 'Pricing',
+    pricing: 'Pricing Details',
     amount: 'Amount (EGP)',
     dailyRate: 'Daily Rate',
     baseAmount: 'Base Rent',
@@ -34,7 +36,7 @@ const pdfLabels = {
     refundableDeposit: 'Refundable Deposit',
     totalRent: 'Total Rent',
     grandTotal: 'Grand Total',
-    thanks: 'Thank you for your business',
+    thanks: 'Thank you for choosing Sunlight Village!',
     reportTitle: 'Financial Report',
     generated: 'Generated',
     dateRange: 'Date Range',
@@ -55,7 +57,7 @@ const pdfLabels = {
   },
   ar: {
     title: 'صن لايت فيليج',
-    subtitle: 'إيصال الحجز',
+    subtitle: 'إيصال الحجز الرسمي',
     date: 'التاريخ',
     tenantInfo: 'معلومات المستأجر',
     name: 'الاسم',
@@ -71,14 +73,14 @@ const pdfLabels = {
     checkOut: 'تاريخ الخروج',
     duration: 'المدة',
     days: 'يوم',
-    pricing: 'التسعير',
+    pricing: 'تفاصيل التسعير',
     amount: 'المبلغ (ج.م)',
     dailyRate: 'السعر اليومي',
-    baseAmount: 'المبلغ الأساسي',
+    baseAmount: 'الإيجار الأساسي',
     housekeeping: 'التنظيف',
     refundableDeposit: 'التأمين (مسترد)',
     totalRent: 'إجمالي الإيجار',
-    grandTotal: 'الإجمالي',
+    grandTotal: 'المجموع الكلي',
     thanks: 'شكراً لاختياركم صن لايت فيليج!',
     reportTitle: 'التقرير المالي',
     generated: 'تاريخ الإنشاء',
@@ -100,76 +102,88 @@ const pdfLabels = {
   },
 };
 
-// Professional palette (RGB) for PDF rendering
-const PDF_COLORS = {
-  brand: [14, 38, 74] as const, // dark blue
-  brandText: [255, 255, 255] as const,
-  headerRule: [220, 220, 220] as const,
-  muted: [110, 110, 110] as const,
-  text: [30, 30, 30] as const,
-  zebra: [248, 248, 248] as const,
-} as const;
+// ============================================================================
+// Design System Colors (RGB for jsPDF)
+// ============================================================================
 
-const PDF_LAYOUT = {
-  marginX: 15,
-  headerTop: 60,
-  footerBottom: 28,
-} as const;
+// Mutable tuples for jsPDF compatibility
+type RGB = [number, number, number];
 
-const addPdfHeader = (
-  pdf: jsPDF,
-  opts: {
-    title: string;
-    subtitle: string;
-    metaLines?: string[];
-  }
-) => {
-  const pageWidth = pdf.internal.pageSize.getWidth();
-
-  // Brand bar
-  pdf.setFillColor(...PDF_COLORS.brand);
-  pdf.rect(0, 0, pageWidth, 32, 'F');
-
-  pdf.setTextColor(...PDF_COLORS.brandText);
-  pdf.setFontSize(20);
-  pdf.text(opts.title, pageWidth / 2, 14, { align: 'center' });
-
-  pdf.setFontSize(11);
-  pdf.text(opts.subtitle, pageWidth / 2, 23, { align: 'center' });
-
-  // Divider + meta
-  pdf.setDrawColor(...PDF_COLORS.headerRule);
-  pdf.setLineWidth(0.6);
-  pdf.line(PDF_LAYOUT.marginX, 38, pageWidth - PDF_LAYOUT.marginX, 38);
-
-  if (opts.metaLines?.length) {
-    pdf.setFontSize(10);
-    pdf.setTextColor(...PDF_COLORS.muted);
-    opts.metaLines.forEach((line, idx) => {
-      pdf.text(line, pageWidth / 2, 48 + idx * 6, { align: 'center' });
-    });
-  }
+const COLORS: Record<string, RGB> = {
+  brand: [14, 38, 74],        // Dark Blue header
+  brandText: [255, 255, 255], // White text on brand
+  headerBg: [240, 240, 240],  // Light grey table headers
+  headerText: [30, 30, 30],   // Dark text
+  text: [30, 30, 30],         // Body text
+  muted: [110, 110, 110],     // Secondary text
+  zebra: [250, 250, 250],     // Alternating row
+  border: [200, 200, 200],    // Table borders
+  success: [22, 163, 74],     // Green
+  danger: [220, 38, 38],      // Red
 };
 
-const addPdfFooter = (
+const LAYOUT = {
+  marginX: 15,
+  marginTop: 50,
+  marginBottom: 30,
+} as const;
+
+// ============================================================================
+// Header & Footer Utilities
+// ============================================================================
+
+const drawBrandHeader = (
   pdf: jsPDF,
-  opts: {
-    thanksLine: string;
-    pageLine: string;
-  }
+  title: string,
+  subtitle: string,
+  isArabic: boolean
+) => {
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  
+  // Brand bar
+  pdf.setFillColor(...COLORS.brand);
+  pdf.rect(0, 0, pageWidth, 35, 'F');
+  
+  // Title
+  pdf.setTextColor(...COLORS.brandText);
+  pdf.setFontSize(22);
+  pdf.text(title, pageWidth / 2, 15, { align: 'center' });
+  
+  // Subtitle
+  pdf.setFontSize(12);
+  pdf.text(subtitle, pageWidth / 2, 26, { align: 'center' });
+  
+  // Decorative line
+  pdf.setDrawColor(...COLORS.border);
+  pdf.setLineWidth(0.5);
+  pdf.line(LAYOUT.marginX, 40, pageWidth - LAYOUT.marginX, 40);
+};
+
+const drawPageFooter = (
+  pdf: jsPDF,
+  thanksText: string,
+  pageText: string
 ) => {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-
-  pdf.setDrawColor(...PDF_COLORS.headerRule);
-  pdf.setLineWidth(0.6);
-  pdf.line(PDF_LAYOUT.marginX, pageHeight - 25, pageWidth - PDF_LAYOUT.marginX, pageHeight - 25);
-
+  
+  // Decorative line
+  pdf.setDrawColor(...COLORS.border);
+  pdf.setLineWidth(0.5);
+  pdf.line(LAYOUT.marginX, pageHeight - 22, pageWidth - LAYOUT.marginX, pageHeight - 22);
+  
+  // Thanks text
   pdf.setFontSize(10);
-  pdf.setTextColor(...PDF_COLORS.muted);
-  pdf.text(opts.thanksLine, pageWidth / 2, pageHeight - 15, { align: 'center' });
-  pdf.text(opts.pageLine, pageWidth / 2, pageHeight - 10, { align: 'center' });
+  pdf.setTextColor(...COLORS.muted);
+  pdf.text(thanksText, pageWidth / 2, pageHeight - 14, { align: 'center' });
+  
+  // Page number
+  pdf.text(pageText, pageWidth / 2, pageHeight - 8, { align: 'center' });
 };
+
+// ============================================================================
+// Booking Receipt PDF
+// ============================================================================
 
 interface BookingReceiptData {
   tenantName: string;
@@ -191,249 +205,160 @@ interface BookingReceiptData {
 export const generateBookingPDF = async (data: BookingReceiptData, language: Language = 'en') => {
   const labels = pdfLabels[language];
   const pdf = new jsPDF('p', 'mm', 'a4');
-  const setup = await setupPdfForLanguage(pdf, language);
-  const tt = setup.t;
-  const rtl = setup.isArabic;
   
-  const baseAmount = data.dailyRate * data.durationDays;
-  const housekeepingAmount = data.housekeepingAmount || 0;
-  const totalRent = baseAmount; // Total Rent is Base Rent ONLY
-  const grandTotal = baseAmount + housekeepingAmount;
+  // Setup font (Amiri for both languages)
+  const { isArabic } = await setupPdfLanguage(pdf, language);
+  
+  // Calculate financials
+  const baseRent = data.dailyRate * data.durationDays;
+  const housekeeping = data.housekeepingAmount || 0;
+  const grandTotal = baseRent + housekeeping;
+  const deposit = data.depositAmount || 0;
   
   const pageWidth = pdf.internal.pageSize.getWidth();
-  const marginX = PDF_LAYOUT.marginX;
   
   // Header
-  addPdfHeader(pdf, {
-    title: tt(labels.title),
-    subtitle: tt(labels.subtitle),
-    metaLines: [
-      `${tt(labels.date)}: ${new Date().toLocaleDateString(rtl ? 'ar-EG' : 'en-US')}`,
-    ],
-  });
+  drawBrandHeader(pdf, labels.title, labels.subtitle, isArabic);
   
-  let yPos = PDF_LAYOUT.headerTop;
-
-  const kvRows = (rows: Array<[string, string]>) =>
-    rtl ? rows.map(([k, v]) => [v, k]) : rows;
-
-  const kvColumnStyles = rtl
-    ? {
-        0: { cellWidth: 'auto', halign: 'right' },
-        1: { fontStyle: 'bold', cellWidth: 55, textColor: [100, 100, 100], halign: 'right' },
-      }
-    : {
-        0: { fontStyle: 'bold', cellWidth: 55, textColor: [100, 100, 100] },
-        1: { cellWidth: 'auto' },
-      };
+  // Date line
+  pdf.setFontSize(10);
+  pdf.setTextColor(...COLORS.muted);
+  const dateStr = `${labels.date}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`;
+  pdf.text(dateStr, pageWidth / 2, 47, { align: 'center' });
   
-  // Tenant Information
+  let yPos = 55;
+  const align = isArabic ? 'right' : 'left';
+  
+  // Helper for key-value rows
+  const makeKvRows = (rows: [string, string][]) => 
+    isArabic ? rows.map(([k, v]) => [v, k]) : rows;
+  
+  const kvColumnStyles = isArabic
+    ? { 0: { halign: 'right' }, 1: { halign: 'right', fontStyle: 'bold', textColor: COLORS.muted } }
+    : { 0: { fontStyle: 'bold', textColor: COLORS.muted }, 1: { halign: 'left' } };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Tenant Information Table
+  // ─────────────────────────────────────────────────────────────────────────
   autoTable(pdf, {
     startY: yPos,
-    head: [
-      [
-        {
-          content: tt(labels.tenantInfo),
-          colSpan: 2,
-          styles: {
-            fillColor: PDF_COLORS.brand as any,
-            textColor: PDF_COLORS.brandText as any,
-            fontStyle: 'bold',
-            halign: rtl ? 'right' : 'left',
-          },
-        },
-      ],
-    ] as any,
-    body: kvRows([
-      [tt(labels.name), tt(data.tenantName)],
-      [tt(labels.phone), tt(data.phoneNumber || '—')],
-      [tt(labels.status), tt(data.status)],
-      [tt(labels.payment), tt(data.paymentStatus || 'Pending')],
-    ]),
+    head: [[{ content: labels.tenantInfo, colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: align } }]],
+    body: makeKvRows([
+      [labels.name, data.tenantName],
+      [labels.phone, data.phoneNumber || '—'],
+      [labels.status, data.status],
+      [labels.payment, data.paymentStatus || 'Pending'],
+    ]) as string[][],
     theme: 'grid',
-    styles: {
-      font: rtl ? 'Cairo' : 'helvetica',
-      fontSize: 11,
-      cellPadding: 4,
-      overflow: 'linebreak',
-      halign: rtl ? 'right' : 'left',
-    },
-    headStyles: {
-      fillColor: PDF_COLORS.brand as any,
-      textColor: PDF_COLORS.brandText as any,
-      fontStyle: 'bold',
-    },
-    alternateRowStyles: { fillColor: PDF_COLORS.zebra as any },
-    columnStyles: kvColumnStyles as any,
-    margin: { left: marginX, right: marginX, top: PDF_LAYOUT.headerTop, bottom: PDF_LAYOUT.footerBottom },
-  });
-  
-  yPos = (pdf as any).lastAutoTable.finalY + 12;
-  
-  // Unit Details
-  autoTable(pdf, {
-    startY: yPos,
-    head: [
-      [
-        {
-          content: tt(labels.propertyDetails),
-          colSpan: 2,
-          styles: {
-            fillColor: PDF_COLORS.brand as any,
-            textColor: PDF_COLORS.brandText as any,
-            fontStyle: 'bold',
-            halign: rtl ? 'right' : 'left',
-          },
-        },
-      ],
-    ] as any,
-    body: kvRows([
-      [tt(labels.unit), tt(`${getUnitTypeEmoji(data.unitType)} ${data.unitName}`)],
-      [tt(labels.type), tt(data.unitType)],
-      [tt(labels.checkIn), tt(data.startDate)],
-      [tt(labels.checkOut), tt(data.endDate)],
-      [tt(labels.duration), tt(`${data.durationDays} ${labels.days}`)],
-    ]),
-    theme: 'grid',
-    styles: {
-      font: rtl ? 'Cairo' : 'helvetica',
-      fontSize: 11,
-      cellPadding: 4,
-      overflow: 'linebreak',
-      halign: rtl ? 'right' : 'left',
-    },
-    headStyles: {
-      fillColor: PDF_COLORS.brand as any,
-      textColor: PDF_COLORS.brandText as any,
-      fontStyle: 'bold',
-    },
-    alternateRowStyles: { fillColor: PDF_COLORS.zebra as any },
-    columnStyles: kvColumnStyles as any,
-    margin: { left: marginX, right: marginX, top: PDF_LAYOUT.headerTop, bottom: PDF_LAYOUT.footerBottom },
-  });
-  
-  yPos = (pdf as any).lastAutoTable.finalY + 12;
-  
-  const pricingRows: Array<[string, string]> = [
-    [`${tt(labels.baseAmount)}`, formatEGP(baseAmount)],
-  ];
-  if (housekeepingAmount > 0) pricingRows.push([tt(labels.housekeeping), formatEGP(housekeepingAmount)]);
-
-  // Total Rent = Base Rent only
-  pricingRows.push([tt(labels.totalRent), formatEGP(totalRent)]);
-  // Grand Total = Base + Housekeeping
-  pricingRows.push([tt(labels.grandTotal), formatEGP(grandTotal)]);
-
-  if (data.depositAmount && data.depositAmount > 0) {
-    pricingRows.push([`${tt(labels.refundableDeposit)} *`, formatEGP(data.depositAmount)]);
-  }
-
-  const pricingHead = rtl
-    ? ([
-        [
-          {
-            content: tt(labels.pricing),
-            colSpan: 2,
-            styles: {
-              fillColor: PDF_COLORS.brand as any,
-              textColor: PDF_COLORS.brandText as any,
-              fontStyle: 'bold',
-              halign: 'right',
-            },
-          },
-        ],
-        [tt(labels.amount), tt(labels.description)],
-      ] as any)
-    : ([
-        [
-          {
-            content: tt(labels.pricing),
-            colSpan: 2,
-            styles: {
-              fillColor: PDF_COLORS.brand as any,
-              textColor: PDF_COLORS.brandText as any,
-              fontStyle: 'bold',
-              halign: 'left',
-            },
-          },
-        ],
-        [tt(labels.description), tt(labels.amount)],
-      ] as any);
-
-  const pricingBody = (rtl
-    ? pricingRows.map(([k, v]) => [v, k])
-    : pricingRows.map(([k, v]) => [k, v])) as any;
-
-  const pricingColumnStyles = rtl
-    ? {
-        0: { cellWidth: 55, halign: 'right' },
-        1: { cellWidth: 'auto', halign: 'right' },
-      }
-    : {
-        0: { cellWidth: 'auto', halign: 'left' },
-        1: { cellWidth: 55, halign: 'right' },
-      };
-  
-  autoTable(pdf, {
-    startY: yPos,
-    head: pricingHead,
-    body: pricingBody,
-    theme: 'grid',
-    styles: {
-      font: rtl ? 'Cairo' : 'helvetica',
-      fontSize: 11,
-      cellPadding: 5,
-      overflow: 'linebreak',
-      halign: rtl ? 'right' : 'left',
-    },
-    headStyles: {
-      fillColor: PDF_COLORS.brand as any,
-      textColor: PDF_COLORS.brandText as any,
-      fontStyle: 'bold',
-    },
-    alternateRowStyles: { fillColor: PDF_COLORS.zebra as any },
-    columnStyles: pricingColumnStyles as any,
-    margin: { left: marginX, right: marginX, top: PDF_LAYOUT.headerTop, bottom: PDF_LAYOUT.footerBottom },
-    didParseCell: (data) => {
-      const raw0 = (data.row.raw as any)?.[0] as string | undefined;
-      const raw1 = (data.row.raw as any)?.[1] as string | undefined;
-      const labelCell = rtl ? raw1 : raw0;
-
-      // Highlight Total Rent and Grand Total rows
-      if (labelCell?.includes(labels.totalRent) || labelCell?.includes(labels.grandTotal)) {
-        data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.fillColor = PDF_COLORS.zebra as any;
-      }
-      // Style deposit row
-      if (labelCell?.includes('*')) {
-        data.cell.styles.fontStyle = 'italic';
-        data.cell.styles.textColor = [100, 100, 100];
-      }
-    },
+    styles: { font: 'Amiri', fontSize: 11, cellPadding: 5, halign: align },
+    headStyles: { fillColor: COLORS.brand, textColor: COLORS.brandText, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: COLORS.zebra },
+    columnStyles: kvColumnStyles as Record<number, object>,
+    margin: { left: LAYOUT.marginX, right: LAYOUT.marginX },
   });
   
   yPos = (pdf as any).lastAutoTable.finalY + 10;
   
-  // Deposit note
-  if (data.depositAmount && data.depositAmount > 0) {
-    pdf.setFontSize(9);
-    pdf.setTextColor(...PDF_COLORS.muted);
-    pdf.text(tt(labels.depositNote), rtl ? pageWidth - marginX : marginX, yPos, { align: rtl ? 'right' : 'left' });
+  // ─────────────────────────────────────────────────────────────────────────
+  // Property Details Table
+  // ─────────────────────────────────────────────────────────────────────────
+  autoTable(pdf, {
+    startY: yPos,
+    head: [[{ content: labels.propertyDetails, colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: align } }]],
+    body: makeKvRows([
+      [labels.unit, `${getUnitTypeEmoji(data.unitType)} ${data.unitName}`],
+      [labels.type, data.unitType],
+      [labels.checkIn, data.startDate],
+      [labels.checkOut, data.endDate],
+      [labels.duration, `${data.durationDays} ${labels.days}`],
+    ]) as string[][],
+    theme: 'grid',
+    styles: { font: 'Amiri', fontSize: 11, cellPadding: 5, halign: align },
+    headStyles: { fillColor: COLORS.brand, textColor: COLORS.brandText, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: COLORS.zebra },
+    columnStyles: kvColumnStyles as Record<number, object>,
+    margin: { left: LAYOUT.marginX, right: LAYOUT.marginX },
+  });
+  
+  yPos = (pdf as any).lastAutoTable.finalY + 10;
+  
+  // ─────────────────────────────────────────────────────────────────────────
+  // Pricing Table
+  // ─────────────────────────────────────────────────────────────────────────
+  const pricingRows: [string, string][] = [
+    [labels.baseAmount, formatEGP(baseRent)],
+  ];
+  if (housekeeping > 0) {
+    pricingRows.push([labels.housekeeping, formatEGP(housekeeping)]);
   }
-
-  // Footer + page numbers on every page
-  const pageHeight = pdf.internal.pageSize.getHeight();
+  pricingRows.push([labels.grandTotal, formatEGP(grandTotal)]);
+  if (deposit > 0) {
+    pricingRows.push([`${labels.refundableDeposit} *`, formatEGP(deposit)]);
+  }
+  
+  const pricingHead = isArabic
+    ? [[{ content: labels.pricing, colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: 'right' } }], [labels.amount, labels.description]]
+    : [[{ content: labels.pricing, colSpan: 2, styles: { fillColor: COLORS.brand, textColor: COLORS.brandText, halign: 'left' } }], [labels.description, labels.amount]];
+  
+  const pricingBody = isArabic
+    ? pricingRows.map(([k, v]) => [v, k])
+    : pricingRows;
+  
+  autoTable(pdf, {
+    startY: yPos,
+    head: pricingHead as any,
+    body: pricingBody as string[][],
+    theme: 'grid',
+    styles: { font: 'Amiri', fontSize: 11, cellPadding: 6, halign: align },
+    headStyles: { fillColor: COLORS.brand, textColor: COLORS.brandText, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: COLORS.zebra },
+    columnStyles: isArabic
+      ? { 0: { halign: 'right', cellWidth: 50 }, 1: { halign: 'right' } }
+      : { 0: { halign: 'left' }, 1: { halign: 'right', cellWidth: 50 } },
+    margin: { left: LAYOUT.marginX, right: LAYOUT.marginX },
+    didParseCell: (hookData) => {
+      const rowData = hookData.row.raw as string[] | undefined;
+      if (!rowData) return;
+      
+      const labelCell = isArabic ? rowData[1] : rowData[0];
+      
+      // Bold Grand Total
+      if (labelCell?.includes(labels.grandTotal)) {
+        hookData.cell.styles.fontStyle = 'bold';
+        hookData.cell.styles.fillColor = [230, 240, 250];
+      }
+      // Italic deposit note
+      if (labelCell?.includes('*')) {
+        hookData.cell.styles.fontStyle = 'italic';
+        hookData.cell.styles.textColor = COLORS.muted;
+      }
+    },
+  });
+  
+  yPos = (pdf as any).lastAutoTable.finalY + 8;
+  
+  // Deposit footnote
+  if (deposit > 0) {
+    pdf.setFontSize(9);
+    pdf.setTextColor(...COLORS.muted);
+    pdf.text(labels.depositNote, isArabic ? pageWidth - LAYOUT.marginX : LAYOUT.marginX, yPos, { align });
+  }
+  
+  // Footer on all pages
   const totalPages = pdf.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
     pdf.setPage(p);
-    addPdfFooter(pdf, {
-      thanksLine: tt(labels.thanks),
-      pageLine: `${tt(labels.page)} ${p} ${tt(labels.of)} ${totalPages}`,
-    });
+    drawPageFooter(pdf, labels.thanks, `${labels.page} ${p} ${labels.of} ${totalPages}`);
   }
   
-  pdf.save(`booking-receipt-${data.tenantName.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-') || 'booking'}.pdf`);
+  // Save
+  const safeName = data.tenantName.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-') || 'booking';
+  pdf.save(`receipt-${safeName}.pdf`);
 };
+
+// ============================================================================
+// Financial Report PDF
+// ============================================================================
 
 interface ReportData {
   dateRange: string;
@@ -458,130 +383,95 @@ interface ReportData {
 export const generateReportPDF = async (data: ReportData, language: Language = 'en') => {
   const labels = pdfLabels[language];
   const pdf = new jsPDF('p', 'mm', 'a4');
-  const { isArabic, t } = await setupPdfForLanguage(pdf, language);
+  
+  const { isArabic } = await setupPdfLanguage(pdf, language);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const marginX = PDF_LAYOUT.marginX;
-  const totalPagesExp = '{total_pages_count_string}';
-
-  // Header
-  addPdfHeader(pdf, {
-    title: t(labels.title),
-    subtitle: t(labels.reportTitle),
-    metaLines: [
-      `${t(labels.generated)}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`,
-      `${t(labels.dateRange)}: ${data.dateRange} | ${t(labels.scope)}: ${data.unitScope}`,
-    ],
-  });
-
-  let yPos = PDF_LAYOUT.headerTop + 10;
+  const totalPagesPlaceholder = '{total_pages_count_string}';
   
-  // Summary Stats
-  const statsData: Array<[string, string]> = [
-    [t(labels.totalRevenue), formatEGP(data.totalRevenue)],
+  // Header
+  drawBrandHeader(pdf, labels.title, labels.reportTitle, isArabic);
+  
+  // Meta info
+  pdf.setFontSize(10);
+  pdf.setTextColor(...COLORS.muted);
+  const metaLine1 = `${labels.generated}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`;
+  const metaLine2 = `${labels.dateRange}: ${data.dateRange} | ${labels.scope}: ${data.unitScope}`;
+  pdf.text(metaLine1, pageWidth / 2, 47, { align: 'center' });
+  pdf.text(metaLine2, pageWidth / 2, 53, { align: 'center' });
+  
+  let yPos = 62;
+  const align = isArabic ? 'right' : 'left';
+  
+  // Summary stats
+  const statsRows: [string, string][] = [
+    [labels.totalRevenue, formatEGP(data.totalRevenue)],
   ];
-  if (typeof data.housekeepingTotal === 'number' && data.housekeepingTotal > 0) {
-    statsData.push([t(labels.housekeeping), formatEGP(data.housekeepingTotal)]);
+  if (data.housekeepingTotal && data.housekeepingTotal > 0) {
+    statsRows.push([labels.housekeeping, formatEGP(data.housekeepingTotal)]);
   }
-  statsData.push(
-    [t(labels.totalBookings), data.totalBookings.toString()],
-    [t(labels.occupiedDays), `${data.occupiedDays} ${t(labels.days)}`],
-    [t(labels.avgDailyRate), formatEGP(data.averageDailyRate)]
+  statsRows.push(
+    [labels.totalBookings, data.totalBookings.toString()],
+    [labels.occupiedDays, `${data.occupiedDays} ${labels.days}`],
+    [labels.avgDailyRate, formatEGP(data.averageDailyRate)]
   );
   
   autoTable(pdf, {
     startY: yPos,
-    head: [],
-    body: (isArabic ? statsData.map(([k, v]) => [v, k]) : statsData) as any,
+    body: (isArabic ? statsRows.map(([k, v]) => [v, k]) : statsRows) as string[][],
     theme: 'grid',
-    styles: {
-      font: isArabic ? 'Cairo' : 'helvetica',
-      fontSize: 12,
-      cellPadding: 6,
-      overflow: 'linebreak',
-      halign: isArabic ? 'right' : 'left',
-    },
-    columnStyles: {
-      0: isArabic ? { fontStyle: 'bold', halign: 'right' } : { fontStyle: 'bold', textColor: [100, 100, 100] },
-      1: isArabic
-        ? { fontStyle: 'bold', textColor: [100, 100, 100], halign: 'right' }
-        : { fontStyle: 'bold', halign: 'right' },
-    },
-    alternateRowStyles: { fillColor: PDF_COLORS.zebra as any },
-    margin: { left: marginX, right: marginX, top: PDF_LAYOUT.headerTop, bottom: PDF_LAYOUT.footerBottom },
+    styles: { font: 'Amiri', fontSize: 12, cellPadding: 6, halign: align },
+    columnStyles: isArabic
+      ? { 0: { fontStyle: 'bold', halign: 'right' }, 1: { textColor: COLORS.muted, halign: 'right' } }
+      : { 0: { fontStyle: 'bold', textColor: COLORS.muted }, 1: { halign: 'right' } },
+    alternateRowStyles: { fillColor: COLORS.zebra },
+    margin: { left: LAYOUT.marginX, right: LAYOUT.marginX },
   });
   
   yPos = (pdf as any).lastAutoTable.finalY + 15;
   
-  // Bookings table with auto-pagination
-  const drawHeaderAndFooter = (pageNumber: number) => {
-    addPdfHeader(pdf, {
-      title: t(labels.title),
-      subtitle: t(labels.reportTitle),
-      metaLines: [
-        `${t(labels.generated)}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`,
-        `${t(labels.dateRange)}: ${data.dateRange} | ${t(labels.scope)}: ${data.unitScope}`,
-      ],
-    });
-
-    addPdfFooter(pdf, {
-      thanksLine: t(labels.thanks),
-      pageLine: `${t(labels.page)} ${pageNumber} ${t(labels.of)} ${totalPagesExp}`,
-    });
-  };
-
+  // Bookings section title
   pdf.setFontSize(14);
-  pdf.setTextColor(...PDF_COLORS.text);
-  pdf.text(t(labels.totalBookings), isArabic ? pageWidth - marginX : marginX, yPos, { align: isArabic ? 'right' : 'left' });
+  pdf.setTextColor(...COLORS.text);
+  pdf.text(labels.totalBookings, isArabic ? pageWidth - LAYOUT.marginX : LAYOUT.marginX, yPos, { align });
   yPos += 8;
-
-  const headEn = [t(labels.unit), t(labels.tenant), t(labels.dates), t(labels.amount), t(labels.status), t(labels.payment)];
-  const headRow = isArabic ? [...headEn].reverse() : headEn;
+  
+  // Bookings table with pagination
+  const headCols = [labels.unit, labels.tenant, labels.dates, labels.amount, labels.status, labels.payment];
+  const headRow = isArabic ? [...headCols].reverse() : headCols;
   
   autoTable(pdf, {
     startY: yPos,
-    head: [
-      headRow,
-    ],
+    head: [headRow],
     body: data.bookings.map((b) => {
-      const row = [t(b.unitName), t(b.tenantName), t(b.dates), formatEGP(b.amount), t(b.status), t(b.paymentStatus)];
+      const row = [b.unitName, b.tenantName, b.dates, formatEGP(b.amount), b.status, b.paymentStatus];
       return isArabic ? row.reverse() : row;
     }),
     theme: 'grid',
-    styles: {
-      font: isArabic ? 'Cairo' : 'helvetica',
-      fontSize: 9,
-      cellPadding: 4,
-      overflow: 'linebreak',
-      halign: isArabic ? 'right' : 'left',
-    },
-    headStyles: {
-      fillColor: PDF_COLORS.brand as any,
-      textColor: PDF_COLORS.brandText as any,
-      fontStyle: 'bold',
-    },
-    alternateRowStyles: { fillColor: PDF_COLORS.zebra as any },
-    margin: { left: marginX, right: marginX, top: PDF_LAYOUT.headerTop, bottom: PDF_LAYOUT.footerBottom },
-    // Auto-pagination: this will automatically create new pages
+    styles: { font: 'Amiri', fontSize: 9, cellPadding: 4, halign: align },
+    headStyles: { fillColor: COLORS.brand, textColor: COLORS.brandText, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: COLORS.zebra },
+    margin: { left: LAYOUT.marginX, right: LAYOUT.marginX, top: LAYOUT.marginTop, bottom: LAYOUT.marginBottom },
     showHead: 'everyPage',
-    didDrawPage: (hookData) => drawHeaderAndFooter(hookData.pageNumber),
+    didDrawPage: (hookData) => {
+      // Redraw header on new pages
+      if (hookData.pageNumber > 1) {
+        drawBrandHeader(pdf, labels.title, labels.reportTitle, isArabic);
+      }
+      drawPageFooter(pdf, labels.thanks, `${labels.page} ${hookData.pageNumber} ${labels.of} ${totalPagesPlaceholder}`);
+    },
   });
-
-  // Replace total pages placeholder
-  (pdf as any).putTotalPages?.(totalPagesExp);
   
-  // Footer on last page (brand system line)
-  const lastPage = pdf.getNumberOfPages();
-  pdf.setPage(lastPage);
-  pdf.setFontSize(10);
-  pdf.setTextColor(...PDF_COLORS.muted);
-  pdf.text('Sunlight Village Property Management System', pageWidth / 2, pageHeight - 20, { align: 'center' });
+  // Replace total pages placeholder
+  (pdf as any).putTotalPages?.(totalPagesPlaceholder);
   
   pdf.save(`report-${data.dateRange.replace(/\s+/g, '-')}.pdf`);
 };
 
-// New: Unit Performance Report
+// ============================================================================
+// Unit Performance Report PDF
+// ============================================================================
+
 export interface UnitPerformanceData {
   unitName: string;
   unitType: UnitType;
@@ -598,100 +488,74 @@ export const generateUnitPerformancePDF = async (
 ) => {
   const labels = pdfLabels[language];
   const pdf = new jsPDF('p', 'mm', 'a4');
-  const { isArabic, t } = await setupPdfForLanguage(pdf, language);
+  
+  const { isArabic } = await setupPdfLanguage(pdf, language);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const marginX = PDF_LAYOUT.marginX;
-  const totalPagesExp = '{total_pages_count_string}';
+  const totalPagesPlaceholder = '{total_pages_count_string}';
   
   // Header
-  addPdfHeader(pdf, {
-    title: t(labels.title),
-    subtitle: t(labels.unitPerformance),
-    metaLines: [
-      `${t(labels.generated)}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`,
-      `${t(labels.dateRange)}: ${dateRange}`,
-    ],
-  });
+  drawBrandHeader(pdf, labels.title, labels.unitPerformance, isArabic);
   
-  let yPos = PDF_LAYOUT.headerTop + 10;
+  // Meta info
+  pdf.setFontSize(10);
+  pdf.setTextColor(...COLORS.muted);
+  pdf.text(`${labels.generated}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`, pageWidth / 2, 47, { align: 'center' });
+  pdf.text(`${labels.dateRange}: ${dateRange}`, pageWidth / 2, 53, { align: 'center' });
+  
+  let yPos = 62;
+  const align = isArabic ? 'right' : 'left';
   
   // Calculate totals
-  const totalRevenue = units.reduce((sum, u) => sum + u.totalRevenue, 0);
-  const totalExpenses = units.reduce((sum, u) => sum + u.totalExpenses, 0);
-  const totalNetProfit = totalRevenue - totalExpenses;
+  const totalRevenue = units.reduce((s, u) => s + u.totalRevenue, 0);
+  const totalExpenses = units.reduce((s, u) => s + u.totalExpenses, 0);
+  const netProfit = totalRevenue - totalExpenses;
   
-  // Summary (Revenue excludes housekeeping; housekeeping is pass-through)
-  const summaryRows: Array<[string, string]> = [[t(labels.totalRevenue), formatEGP(totalRevenue)]];
-  if (housekeepingTotal > 0) summaryRows.push([t(labels.housekeeping), formatEGP(housekeepingTotal)]);
+  // Summary
+  const summaryRows: [string, string][] = [[labels.totalRevenue, formatEGP(totalRevenue)]];
+  if (housekeepingTotal > 0) {
+    summaryRows.push([labels.housekeeping, formatEGP(housekeepingTotal)]);
+  }
   summaryRows.push(
-    [t(labels.totalExpenses), formatEGP(totalExpenses)],
-    [t(labels.netProfit), formatEGP(totalNetProfit)]
+    [labels.totalExpenses, formatEGP(totalExpenses)],
+    [labels.netProfit, formatEGP(netProfit)]
   );
-
+  
   autoTable(pdf, {
     startY: yPos,
-    head: [],
-    body: (isArabic ? summaryRows.map(([k, v]) => [v, k]) : summaryRows) as any,
+    body: (isArabic ? summaryRows.map(([k, v]) => [v, k]) : summaryRows) as string[][],
     theme: 'grid',
-    styles: {
-      font: isArabic ? 'Cairo' : 'helvetica',
-      fontSize: 12,
-      cellPadding: 6,
-      overflow: 'linebreak',
-      halign: isArabic ? 'right' : 'left',
-    },
-    columnStyles: {
-      0: isArabic ? { fontStyle: 'bold', halign: 'right' } : { fontStyle: 'bold', textColor: [100, 100, 100] },
-      1: { fontStyle: 'bold', halign: 'right' },
-    },
-    alternateRowStyles: { fillColor: PDF_COLORS.zebra as any },
-    margin: { left: marginX, right: marginX, top: PDF_LAYOUT.headerTop, bottom: PDF_LAYOUT.footerBottom },
-    didParseCell: (data) => {
-      if (data.row.index === 0) {
-        data.cell.styles.textColor = [22, 163, 74]; // Green for revenue
-      } else if (data.row.index === 1) {
-        // housekeeping row (neutral)
-        data.cell.styles.textColor = [100, 100, 100];
-      } else if (data.row.index === 2) {
-        data.cell.styles.textColor = [220, 38, 38]; // Red for expenses
-      } else if (data.row.index === 3) {
-        // Net profit row
-        data.cell.styles.textColor = totalNetProfit >= 0 ? [22, 163, 74] : [220, 38, 38];
+    styles: { font: 'Amiri', fontSize: 12, cellPadding: 6, halign: align },
+    columnStyles: isArabic
+      ? { 0: { fontStyle: 'bold', halign: 'right' }, 1: { textColor: COLORS.muted, halign: 'right' } }
+      : { 0: { fontStyle: 'bold', textColor: COLORS.muted }, 1: { halign: 'right' } },
+    alternateRowStyles: { fillColor: COLORS.zebra },
+    margin: { left: LAYOUT.marginX, right: LAYOUT.marginX },
+    didParseCell: (hookData) => {
+      if (hookData.row.index === 0) {
+        hookData.cell.styles.textColor = COLORS.success;
+      } else if (hookData.row.index === summaryRows.length - 2) {
+        hookData.cell.styles.textColor = COLORS.danger;
+      } else if (hookData.row.index === summaryRows.length - 1) {
+        hookData.cell.styles.textColor = netProfit >= 0 ? COLORS.success : COLORS.danger;
+        hookData.cell.styles.fontStyle = 'bold';
       }
     },
   });
   
-  yPos = (pdf as any).lastAutoTable.finalY + 20;
+  yPos = (pdf as any).lastAutoTable.finalY + 15;
   
-  // Units performance table
-  const drawHeaderAndFooter = (pageNumber: number) => {
-    addPdfHeader(pdf, {
-      title: t(labels.title),
-      subtitle: t(labels.unitPerformance),
-      metaLines: [
-        `${t(labels.generated)}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`,
-        `${t(labels.dateRange)}: ${dateRange}`,
-      ],
-    });
-
-    addPdfFooter(pdf, {
-      thanksLine: t(labels.thanks),
-      pageLine: `${t(labels.page)} ${pageNumber} ${t(labels.of)} ${totalPagesExp}`,
-    });
-  };
-
-  const unitHeadEn = [t(labels.unit), t(labels.type), t(labels.totalRevenue), t(labels.totalExpenses), t(labels.netProfit)];
-  const unitHeadRow = isArabic ? [...unitHeadEn].reverse() : unitHeadEn;
-
+  // Units table
+  const headCols = [labels.unit, labels.type, labels.totalRevenue, labels.totalExpenses, labels.netProfit];
+  const headRow = isArabic ? [...headCols].reverse() : headCols;
+  
   autoTable(pdf, {
     startY: yPos,
-    head: [unitHeadRow],
+    head: [headRow],
     body: units.map((u) => {
       const row = [
-        t(`${getUnitTypeEmoji(u.unitType)} ${u.unitName}`),
-        t(u.unitType),
+        `${getUnitTypeEmoji(u.unitType)} ${u.unitName}`,
+        u.unitType,
         formatEGP(u.totalRevenue),
         formatEGP(u.totalExpenses),
         formatEGP(u.netProfit),
@@ -699,44 +563,31 @@ export const generateUnitPerformancePDF = async (
       return isArabic ? row.reverse() : row;
     }),
     theme: 'grid',
-    styles: {
-      font: isArabic ? 'Cairo' : 'helvetica',
-      fontSize: 10,
-      cellPadding: 5,
-      overflow: 'linebreak',
-      halign: isArabic ? 'right' : 'left',
-    },
-    headStyles: {
-      fillColor: PDF_COLORS.brand as any,
-      textColor: PDF_COLORS.brandText as any,
-      fontStyle: 'bold',
-    },
-    alternateRowStyles: { fillColor: PDF_COLORS.zebra as any },
-    margin: { left: marginX, right: marginX, top: PDF_LAYOUT.headerTop, bottom: PDF_LAYOUT.footerBottom },
+    styles: { font: 'Amiri', fontSize: 10, cellPadding: 5, halign: align },
+    headStyles: { fillColor: COLORS.brand, textColor: COLORS.brandText, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: COLORS.zebra },
+    margin: { left: LAYOUT.marginX, right: LAYOUT.marginX, top: LAYOUT.marginTop, bottom: LAYOUT.marginBottom },
     showHead: 'everyPage',
-    didDrawPage: (hookData) => drawHeaderAndFooter(hookData.pageNumber),
-    didParseCell: (data) => {
-      // Color net profit column
-      const profitColumnIndex = isArabic ? 0 : 4;
-      if (data.column.index === profitColumnIndex && data.section === 'body') {
-        const unit = units[data.row.index];
+    didDrawPage: (hookData) => {
+      if (hookData.pageNumber > 1) {
+        drawBrandHeader(pdf, labels.title, labels.unitPerformance, isArabic);
+      }
+      drawPageFooter(pdf, labels.thanks, `${labels.page} ${hookData.pageNumber} ${labels.of} ${totalPagesPlaceholder}`);
+    },
+    didParseCell: (hookData) => {
+      // Color the Net Profit column
+      const profitColIndex = isArabic ? 0 : 4;
+      if (hookData.column.index === profitColIndex && hookData.section === 'body') {
+        const unit = units[hookData.row.index];
         if (unit) {
-          data.cell.styles.textColor = unit.netProfit >= 0 ? [22, 163, 74] : [220, 38, 38];
-          data.cell.styles.fontStyle = 'bold';
+          hookData.cell.styles.textColor = unit.netProfit >= 0 ? COLORS.success : COLORS.danger;
+          hookData.cell.styles.fontStyle = 'bold';
         }
       }
     },
   });
-
-  (pdf as any).putTotalPages?.(totalPagesExp);
-
-  const pageCount = pdf.getNumberOfPages();
   
-  // Footer
-  pdf.setPage(pageCount);
-  pdf.setFontSize(10);
-  pdf.setTextColor(...PDF_COLORS.muted);
-  pdf.text('Sunlight Village Property Management System', pageWidth / 2, pageHeight - 20, { align: 'center' });
+  (pdf as any).putTotalPages?.(totalPagesPlaceholder);
   
   pdf.save(`unit-performance-${dateRange.replace(/\s+/g, '-')}.pdf`);
 };
