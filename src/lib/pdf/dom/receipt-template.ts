@@ -38,9 +38,6 @@ const text = (language: PdfLanguage) => {
       housekeeping: 'التنظيف',
       total: 'الإجمالي',
       refundableDeposit: 'تأمين قابل للاسترداد',
-      payment: 'تعليمات الدفع',
-      whatsapp: 'واتساب',
-      instapay: 'انستاباي',
     };
   }
 
@@ -62,16 +59,7 @@ const text = (language: PdfLanguage) => {
     housekeeping: 'Housekeeping',
     total: 'Total',
     refundableDeposit: 'Refundable Deposit',
-    payment: 'Payment Instructions',
-    whatsapp: 'WhatsApp',
-    instapay: 'InstaPay',
   };
-};
-
-// Lessor contact information (kept here so template is self-contained)
-const LESSOR_INFO = {
-  whatsApp: '+20 100 123 4567',
-  instaPay: 'sunlight.village',
 };
 
 const createSectionTitle = (label: string) => {
@@ -254,18 +242,6 @@ export const buildBookingReceiptElement = (booking: Booking, language: PdfLangua
     depositBox.appendChild(depositRow);
     root.appendChild(depositBox);
   }
-
-  // Payment instructions
-  root.appendChild(createSectionTitle(t.payment));
-  root.appendChild(
-    createKeyValueTable(
-      [
-        [t.whatsapp, LESSOR_INFO.whatsApp],
-        [t.instapay, LESSOR_INFO.instaPay],
-      ],
-      language
-    )
-  );
 
   return root;
 };

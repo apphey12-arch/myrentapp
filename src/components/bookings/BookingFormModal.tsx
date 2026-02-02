@@ -136,60 +136,56 @@ export const BookingFormModal = ({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>{t('unit')}</Label>
-              <Select value={unitId} onValueChange={setUnitId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t('unit')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {units.map((unit) => (
-                    <SelectItem key={unit.id} value={unit.id}>
-                      {unit.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>{t('status')}</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as BookingStatus)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {t(s.toLowerCase())}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label>{t('unit')}</Label>
+            <Select value={unitId} onValueChange={setUnitId}>
+              <SelectTrigger>
+                <SelectValue placeholder={t('unit')} />
+              </SelectTrigger>
+              <SelectContent>
+                {units.map((unit) => (
+                  <SelectItem key={unit.id} value={unit.id}>
+                    {unit.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>{t('tenantName')}</Label>
-              <Input
-                placeholder={t('tenantName')}
-                value={tenantName}
-                onChange={(e) => setTenantName(e.target.value)}
-                required
-              />
-            </div>
+          <div className="space-y-2">
+            <Label>{t('status')}</Label>
+            <Select value={status} onValueChange={(v) => setStatus(v as BookingStatus)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {t(s.toLowerCase())}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-            <div className="space-y-2">
-              <Label>{t('phoneNumber')}</Label>
-              <Input
-                placeholder={t('phoneNumber')}
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                type="tel"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label>{t('tenantName')}</Label>
+            <Input
+              placeholder={t('tenantName')}
+              value={tenantName}
+              onChange={(e) => setTenantName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t('phoneNumber')}</Label>
+            <Input
+              placeholder={t('phoneNumber')}
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              type="tel"
+            />
           </div>
 
           <div className="space-y-2">
@@ -208,43 +204,43 @@ export const BookingFormModal = ({
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>{t('startDate')}</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      'w-full justify-start text-left font-normal',
-                      !startDate && 'text-muted-foreground'
-                    )}
-                  >
-                    <CalendarIcon className="ltr:mr-2 rtl:ml-2 h-4 w-4" />
+          <div className="space-y-2">
+            <Label>{t('startDate')}</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    'w-full justify-start text-left font-normal overflow-hidden',
+                    !startDate && 'text-muted-foreground'
+                  )}
+                >
+                  <CalendarIcon className="ltr:mr-2 rtl:ml-2 h-4 w-4 shrink-0" />
+                  <span className="truncate">
                     {startDate ? format(startDate, 'PPP') : t('startDate')}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={startDate}
-                    onSelect={setStartDate}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={startDate}
+                  onSelect={setStartDate}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
 
-            <div className="space-y-2">
-              <Label>{t('duration')}</Label>
-              <Input
-                type="number"
-                min={1}
-                value={durationDays}
-                onChange={(e) => setDurationDays(Math.max(1, parseInt(e.target.value) || 1))}
-                required
-              />
-            </div>
+          <div className="space-y-2">
+            <Label>{t('duration')}</Label>
+            <Input
+              type="number"
+              min={1}
+              value={durationDays}
+              onChange={(e) => setDurationDays(Math.max(1, parseInt(e.target.value) || 1))}
+              required
+            />
           </div>
 
           {endDate && (
@@ -254,24 +250,22 @@ export const BookingFormModal = ({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>{t('dailyRate')} (EGP)</Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                value={dailyRate}
-                onChange={(e) => setDailyRate(parseFloat(e.target.value) || 0)}
-                required
-              />
-            </div>
+          <div className="space-y-2">
+            <Label>{t('dailyRate')} (EGP)</Label>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              value={dailyRate}
+              onChange={(e) => setDailyRate(parseFloat(e.target.value) || 0)}
+              required
+            />
+          </div>
 
-            <div className="space-y-2">
-              <Label>{t('totalAmount')}</Label>
-              <div className="flex h-10 items-center rounded-md border bg-muted/50 px-3 font-semibold text-primary">
-                {formatEGP(totalAmount)}
-              </div>
+          <div className="space-y-2">
+            <Label>{t('totalAmount')}</Label>
+            <div className="flex h-10 items-center rounded-md border bg-muted/50 px-3 font-semibold text-primary">
+              {formatEGP(totalAmount)}
             </div>
           </div>
 
@@ -338,7 +332,7 @@ export const BookingFormModal = ({
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex flex-wrap justify-end gap-3 pt-4">
             <Button
               type="button"
               variant="outline"

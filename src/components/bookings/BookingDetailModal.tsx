@@ -275,12 +275,14 @@ export const BookingDetailModal = ({
                   <Button
                     variant="outline"
                     className={cn(
-                      'w-full justify-start text-left font-normal',
+                      'w-full justify-start text-left font-normal overflow-hidden',
                       !startDate && 'text-muted-foreground'
                     )}
                   >
-                    <CalendarIcon className="ltr:mr-2 rtl:ml-2 h-4 w-4" />
-                    {startDate ? format(startDate, 'PPP') : t('startDate')}
+                    <CalendarIcon className="ltr:mr-2 rtl:ml-2 h-4 w-4 shrink-0" />
+                    <span className="truncate">
+                      {startDate ? format(startDate, 'PPP') : t('startDate')}
+                    </span>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
@@ -449,7 +451,7 @@ export const BookingDetailModal = ({
             </Button>
           </div>
 
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-wrap justify-end gap-3">
             <Button
               type="button"
               variant="outline"
