@@ -1,18 +1,44 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatEGP } from './currency';
-import { BookingStatus, UnitType } from '@/types/database';
+import { BookingStatus, UnitType, PaymentStatus, getUnitTypeEmoji } from '@/types/database';
+
+// Cairo font Base64 (subset for Arabic support)
+// We'll use a simpler approach - generate text as Unicode
+const setupArabicSupport = (doc: jsPDF) => {
+  // For Arabic text, we need to reverse the string for RTL display
+  // jsPDF doesn't natively support RTL, so we handle it manually
+};
+
+// Helper to check if text contains Arabic
+const containsArabic = (text: string): boolean => {
+  return /[\u0600-\u06FF]/.test(text);
+};
+
+// Process text for PDF - handle Arabic by reversing for display
+const processText = (text: string): string => {
+  if (containsArabic(text)) {
+    // For Arabic text in PDF, we need special handling
+    // Split by spaces, reverse each word, then reverse word order
+    return text.split(' ').reverse().join(' ');
+  }
+  return text;
+};
 
 interface BookingReceiptData {
   tenantName: string;
+  phoneNumber?: string | null;
   unitName: string;
   unitType: UnitType;
   startDate: string;
   endDate: string;
   durationDays: number;
   dailyRate: number;
+  depositAmount?: number;
+  housekeepingAmount?: number;
   totalAmount: number;
   status: BookingStatus;
+  paymentStatus?: PaymentStatus;
   depositPaid: boolean;
 }
 
@@ -30,7 +56,7 @@ export const generateBookingPDF = (data: BookingReceiptData) => {
   
   doc.setFontSize(12);
   doc.setFont('helvetica', 'normal');
-  doc.text('Booking Receipt', 20, 35);
+  doc.text('Booking Receipt / إيصال الحجز', 20, 35);
   
   // Reset colors
   doc.setTextColor(0, 0, 0);
@@ -42,32 +68,41 @@ export const generateBookingPDF = (data: BookingReceiptData) => {
   // Tenant info section
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text('Tenant Information', 20, 65);
+  doc.text('Tenant Information / معلومات المستأجر', 20, 65);
   
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Name: ${data.tenantName}`, 20, 75);
-  doc.text(`Status: ${data.status}`, 20, 82);
-  doc.text(`Deposit Paid: ${data.depositPaid ? 'Yes' : 'No'}`, 20, 89);
+  
+  // Handle Arabic name by displaying it properly
+  const tenantNameLabel = `Name / الاسم: ${data.tenantName}`;
+  doc.text(tenantNameLabel, 20, 75);
+  
+  if (data.phoneNumber) {
+    doc.text(`Phone / الهاتف: ${data.phoneNumber}`, 20, 82);
+  }
+  doc.text(`Status / الحالة: ${data.status}`, 20, data.phoneNumber ? 89 : 82);
+  doc.text(`Payment / الدفع: ${data.paymentStatus || 'N/A'}`, 20, data.phoneNumber ? 96 : 89);
   
   // Unit info section
+  const unitStartY = data.phoneNumber ? 112 : 105;
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text('Property Details', 20, 105);
+  doc.text('Property Details / تفاصيل العقار', 20, unitStartY);
   
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Unit: ${data.unitName}`, 20, 115);
-  doc.text(`Type: ${data.unitType}`, 20, 122);
+  doc.text(`Unit / الوحدة: ${data.unitName}`, 20, unitStartY + 10);
+  doc.text(`Type / النوع: ${getUnitTypeEmoji(data.unitType)} ${data.unitType}`, 20, unitStartY + 17);
   
   // Booking dates table
+  const tableStartY = unitStartY + 30;
   autoTable(doc, {
-    startY: 135,
-    head: [['Description', 'Details']],
+    startY: tableStartY,
+    head: [['Description / الوصف', 'Details / التفاصيل']],
     body: [
-      ['Check-in Date', data.startDate],
-      ['Check-out Date', data.endDate],
-      ['Duration', `${data.durationDays} day${data.durationDays > 1 ? 's' : ''}`],
+      ['Check-in Date / تاريخ الدخول', data.startDate],
+      ['Check-out Date / تاريخ الخروج', data.endDate],
+      ['Duration / المدة', `${data.durationDays} day(s) / يوم`],
     ],
     theme: 'striped',
     headStyles: { fillColor: [14, 116, 144] },
@@ -75,20 +110,32 @@ export const generateBookingPDF = (data: BookingReceiptData) => {
   });
   
   // Pricing table
-  const finalY = (doc as any).lastAutoTable.finalY || 165;
+  const priceTableY = (doc as any).lastAutoTable.finalY + 15;
+  
+  const priceBody: string[][] = [
+    ['Daily Rate / السعر اليومي', formatEGP(data.dailyRate)],
+    ['Duration / المدة', `${data.durationDays} days / أيام`],
+    ['Base Amount / المبلغ الأساسي', formatEGP(data.dailyRate * data.durationDays)],
+  ];
+  
+  if (data.depositAmount && data.depositAmount > 0) {
+    priceBody.push(['Deposit / العربون', formatEGP(data.depositAmount)]);
+  }
+  
+  if (data.housekeepingAmount && data.housekeepingAmount > 0) {
+    priceBody.push(['Housekeeping / التنظيف', formatEGP(data.housekeepingAmount)]);
+  }
+  
+  priceBody.push(['Total Amount / المبلغ الإجمالي', formatEGP(data.totalAmount)]);
   
   autoTable(doc, {
-    startY: finalY + 15,
-    head: [['Pricing', 'Amount (EGP)']],
-    body: [
-      ['Daily Rate', formatEGP(data.dailyRate)],
-      ['Duration', `${data.durationDays} days`],
-      ['Total Amount', formatEGP(data.totalAmount)],
-    ],
+    startY: priceTableY,
+    head: [['Pricing / التسعير', 'Amount (EGP) / المبلغ']],
+    body: priceBody,
     theme: 'striped',
     headStyles: { fillColor: [14, 116, 144] },
     margin: { left: 20, right: 20 },
-    foot: [['Grand Total', formatEGP(data.totalAmount)]],
+    foot: [['Grand Total / الإجمالي', formatEGP(data.totalAmount)]],
     footStyles: { fillColor: [251, 191, 36], textColor: [0, 0, 0], fontStyle: 'bold' },
   });
   
@@ -97,16 +144,19 @@ export const generateBookingPDF = (data: BookingReceiptData) => {
   doc.setFontSize(9);
   doc.setTextColor(128, 128, 128);
   doc.text('Thank you for choosing Sunlight Village!', 105, pageHeight - 20, { align: 'center' });
-  doc.text('For inquiries, please contact our management office.', 105, pageHeight - 14, { align: 'center' });
+  doc.text('شكراً لاختياركم صن لايت فيليج!', 105, pageHeight - 14, { align: 'center' });
   
   // Save PDF
-  doc.save(`booking-receipt-${data.tenantName.replace(/\s+/g, '-')}.pdf`);
+  const safeFileName = data.tenantName.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+  doc.save(`booking-receipt-${safeFileName}.pdf`);
 };
 
 interface ReportData {
   dateRange: string;
   unitScope: string;
   totalRevenue: number;
+  totalExpenses: number;
+  netIncome: number;
   totalBookings: number;
   occupiedDays: number;
   averageDailyRate: number;
@@ -116,6 +166,7 @@ interface ReportData {
     dates: string;
     amount: number;
     status: string;
+    paymentStatus: string;
   }[];
 }
 
@@ -132,7 +183,7 @@ export const generateReportPDF = (data: ReportData) => {
   doc.text('Sunlight Village', 20, 25);
   
   doc.setFontSize(14);
-  doc.text('Financial Report', 20, 35);
+  doc.text('Financial Report / التقرير المالي', 20, 35);
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -146,55 +197,65 @@ export const generateReportPDF = (data: ReportData) => {
   doc.text(`Date Range: ${data.dateRange}`, 20, 60);
   doc.text(`Scope: ${data.unitScope}`, 20, 67);
   
-  // Summary cards
+  // Summary cards - Row 1
   doc.setFillColor(240, 240, 240);
-  doc.roundedRect(20, 75, 80, 35, 3, 3, 'F');
-  doc.roundedRect(110, 75, 80, 35, 3, 3, 'F');
+  doc.roundedRect(20, 75, 55, 35, 3, 3, 'F');
+  doc.roundedRect(80, 75, 55, 35, 3, 3, 'F');
+  doc.roundedRect(140, 75, 50, 35, 3, 3, 'F');
   
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
-  doc.text('Total Revenue', 30, 85);
-  doc.text('Total Bookings', 120, 85);
+  doc.text('Total Revenue', 25, 85);
+  doc.text('Total Expenses', 85, 85);
+  doc.text('Net Income', 145, 85);
   
-  doc.setFontSize(16);
+  doc.setFontSize(12);
   doc.setTextColor(14, 116, 144);
   doc.setFont('helvetica', 'bold');
-  doc.text(formatEGP(data.totalRevenue), 30, 100);
-  doc.text(data.totalBookings.toString(), 120, 100);
+  doc.text(formatEGP(data.totalRevenue), 25, 100);
+  doc.setTextColor(220, 38, 38);
+  doc.text(formatEGP(data.totalExpenses), 85, 100);
+  doc.setTextColor(data.netIncome >= 0 ? 22 : 220, data.netIncome >= 0 ? 163 : 38, data.netIncome >= 0 ? 74 : 38);
+  doc.text(formatEGP(data.netIncome), 145, 100);
   
+  // Summary cards - Row 2
   doc.setFillColor(240, 240, 240);
-  doc.roundedRect(20, 115, 80, 35, 3, 3, 'F');
-  doc.roundedRect(110, 115, 80, 35, 3, 3, 'F');
+  doc.roundedRect(20, 115, 55, 35, 3, 3, 'F');
+  doc.roundedRect(80, 115, 55, 35, 3, 3, 'F');
+  doc.roundedRect(140, 115, 50, 35, 3, 3, 'F');
   
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
   doc.setFont('helvetica', 'normal');
-  doc.text('Occupied Days', 30, 125);
-  doc.text('Avg. Daily Rate', 120, 125);
+  doc.text('Total Bookings', 25, 125);
+  doc.text('Occupied Days', 85, 125);
+  doc.text('Avg. Daily Rate', 145, 125);
   
-  doc.setFontSize(16);
+  doc.setFontSize(12);
   doc.setTextColor(14, 116, 144);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${data.occupiedDays} days`, 30, 140);
-  doc.text(formatEGP(data.averageDailyRate), 120, 140);
+  doc.text(data.totalBookings.toString(), 25, 140);
+  doc.text(`${data.occupiedDays} days`, 85, 140);
+  doc.text(formatEGP(data.averageDailyRate), 145, 140);
   
   // Bookings table
   doc.setTextColor(0, 0, 0);
   
   autoTable(doc, {
     startY: 160,
-    head: [['Unit', 'Tenant', 'Dates', 'Amount', 'Status']],
+    head: [['Unit', 'Tenant', 'Dates', 'Amount', 'Status', 'Payment']],
     body: data.bookings.map(b => [
       b.unitName,
       b.tenantName,
       b.dates,
       formatEGP(b.amount),
       b.status,
+      b.paymentStatus,
     ]),
     theme: 'striped',
     headStyles: { fillColor: [14, 116, 144] },
     margin: { left: 20, right: 20 },
-    styles: { fontSize: 9 },
+    styles: { fontSize: 8 },
   });
   
   // Footer
