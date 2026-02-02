@@ -40,6 +40,9 @@ export const translations: Translations = {
   signInWithGoogle: { en: 'Sign in with Google', ar: 'تسجيل الدخول عبر جوجل' },
   welcomeBack: { en: 'Welcome Back', ar: 'مرحباً بعودتك' },
   createAccount: { en: 'Create Account', ar: 'إنشاء حساب' },
+  forgotPassword: { en: 'Forgot Password?', ar: 'نسيت كلمة المرور؟' },
+  resetPassword: { en: 'Reset Password', ar: 'إعادة تعيين كلمة المرور' },
+  changePassword: { en: 'Change Password', ar: 'تغيير كلمة المرور' },
 
   // Dashboard
   overview: { en: 'Overview of your bookings', ar: 'نظرة عامة على حجوزاتك' },
@@ -60,7 +63,8 @@ export const translations: Translations = {
   totalAmount: { en: 'Total Amount', ar: 'المبلغ الإجمالي' },
   status: { en: 'Status', ar: 'الحالة' },
   paymentStatus: { en: 'Payment Status', ar: 'حالة الدفع' },
-  deposit: { en: 'Deposit', ar: 'العربون' },
+  deposit: { en: 'Deposit', ar: 'التأمين' },
+  refundableDeposit: { en: 'Refundable Deposit', ar: 'التأمين (مسترد)' },
   housekeeping: { en: 'Housekeeping', ar: 'التنظيف' },
   notes: { en: 'Notes', ar: 'ملاحظات' },
   tenantRating: { en: 'Tenant Rating', ar: 'تقييم المستأجر' },
@@ -88,12 +92,15 @@ export const translations: Translations = {
   lightMode: { en: 'Light Mode', ar: 'الوضع الفاتح' },
   english: { en: 'English', ar: 'الإنجليزية' },
   arabic: { en: 'Arabic', ar: 'العربية' },
+  security: { en: 'Security', ar: 'الأمان' },
 
   // PDF
   printReceipt: { en: 'Print Receipt', ar: 'طباعة الإيصال' },
   bookingReceipt: { en: 'Booking Receipt', ar: 'إيصال الحجز' },
   tenantInformation: { en: 'Tenant Information', ar: 'معلومات المستأجر' },
   propertyDetails: { en: 'Property Details', ar: 'تفاصيل العقار' },
+  exportPdf: { en: 'Export PDF', ar: 'تصدير PDF' },
+  selectLanguage: { en: 'Select Language', ar: 'اختر اللغة' },
 
   // Expenses
   addExpense: { en: 'Add Expense', ar: 'إضافة مصروف' },
@@ -102,6 +109,7 @@ export const translations: Translations = {
   category: { en: 'Category', ar: 'الفئة' },
   expenseDate: { en: 'Date', ar: 'التاريخ' },
   totalExpenses: { en: 'Total Expenses', ar: 'إجمالي المصروفات' },
+  netProfit: { en: 'Net Profit', ar: 'صافي الربح' },
 
   // Charts
   revenueVsExpenses: { en: 'Revenue vs Expenses', ar: 'الإيرادات مقابل المصروفات' },
@@ -113,6 +121,7 @@ export const translations: Translations = {
   filterByUnitType: { en: 'Filter by unit type', ar: 'تصفية حسب نوع الوحدة' },
   allUnits: { en: 'All Units', ar: 'كل الوحدات' },
   allTypes: { en: 'All Types', ar: 'كل الأنواع' },
+  general: { en: 'General', ar: 'عام' },
 };
 
 interface LanguageContextType {

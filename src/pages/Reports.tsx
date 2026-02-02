@@ -18,15 +18,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CalendarIcon, FileText, Loader2, TrendingUp, Calendar as CalendarIconLucide, DollarSign, TrendingDown } from 'lucide-react';
+import { CalendarIcon, FileText, Loader2, TrendingUp, Calendar as CalendarIconLucide, DollarSign } from 'lucide-react';
 import { format, parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { formatEGP, formatEGPCompact } from '@/lib/currency';
 import { formatDateRange } from '@/lib/date-utils';
 import { generateReportPDF } from '@/lib/pdf-generator';
 import { DateRange } from 'react-day-picker';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useLanguage, Language } from '@/contexts/LanguageContext';
 import { getUnitTypeEmoji } from '@/types/database';
+import { PdfLanguageModal } from '@/components/pdf/PdfLanguageModal';
 
 const ReportsPage = () => {
   const { t } = useLanguage();
@@ -35,6 +36,7 @@ const ReportsPage = () => {
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date()),
   });
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
 
   const { units, isLoading: unitsLoading } = useUnits();
   const { bookings, isLoading: bookingsLoading } = useBookings();
@@ -102,7 +104,7 @@ const ReportsPage = () => {
     };
   }, [filteredBookings, expenses]);
 
-  const handleExportPDF = () => {
+  const handleExportPDF = (language: Language) => {
     const activeBookings = filteredBookings.filter(b => b.status !== 'Cancelled');
     
     generateReportPDF({
@@ -126,7 +128,7 @@ const ReportsPage = () => {
         status: b.status,
         paymentStatus: b.payment_status || 'Pending',
       })),
-    });
+    }, language);
   };
 
   return (
@@ -135,10 +137,10 @@ const ReportsPage = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="font-display text-3xl font-bold text-foreground">Reports</h1>
+            <h1 className="font-display text-3xl font-bold text-foreground">{t('reports')}</h1>
             <p className="text-muted-foreground mt-1">Financial analytics and insights</p>
           </div>
-          <Button onClick={handleExportPDF} className="gradient-ocean gap-2">
+          <Button onClick={() => setPdfModalOpen(true)} className="gradient-ocean gap-2">
             <FileText className="h-4 w-4" />
             Export PDF Report
           </Button>
@@ -147,7 +149,7 @@ const ReportsPage = () => {
         {/* Filters */}
         <Card className="shadow-soft mb-8">
           <CardHeader>
-            <CardTitle className="text-lg">Filters</CardTitle>
+            <CardTitle className="text-lg">{t('filter')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-4">
@@ -162,7 +164,7 @@ const ReportsPage = () => {
                         !dateRange && 'text-muted-foreground'
                       )}
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      <CalendarIcon className="ltr:mr-2 rtl:ml-2 h-4 w-4" />
                       {dateRange?.from ? (
                         dateRange.to ? (
                           <>
@@ -191,16 +193,16 @@ const ReportsPage = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Unit</label>
+                <label className="text-sm font-medium">{t('unit')}</label>
                 <Select value={unitFilter} onValueChange={setUnitFilter}>
                   <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="Filter by unit" />
+                    <SelectValue placeholder={t('filterByUnit')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Units</SelectItem>
+                    <SelectItem value="all">{t('allUnits')}</SelectItem>
                     {units.map((unit) => (
                       <SelectItem key={unit.id} value={unit.id}>
-                        {unit.name}
+                        {getUnitTypeEmoji(unit.type)} {unit.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -225,7 +227,7 @@ const ReportsPage = () => {
                       <DollarSign className="h-7 w-7 text-primary-foreground" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Total Revenue</p>
+                      <p className="text-sm text-muted-foreground">{t('totalRevenue')}</p>
                       <p className="text-2xl font-bold text-foreground">
                         {formatEGPCompact(stats.totalRevenue)}
                       </p>
@@ -257,7 +259,7 @@ const ReportsPage = () => {
                       <TrendingUp className="h-7 w-7 text-warning" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Avg Daily Rate</p>
+                      <p className="text-sm text-muted-foreground">{t('avgDailyRate')}</p>
                       <p className="text-2xl font-bold text-foreground">
                         {formatEGP(stats.avgDailyRate)}
                       </p>
@@ -273,7 +275,7 @@ const ReportsPage = () => {
                       <FileText className="h-7 w-7 text-accent-foreground" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Total Bookings</p>
+                      <p className="text-sm text-muted-foreground">{t('totalBookings')}</p>
                       <p className="text-2xl font-bold text-foreground">
                         {stats.totalBookings}
                       </p>
@@ -291,7 +293,7 @@ const ReportsPage = () => {
               <CardContent>
                 {filteredBookings.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    No bookings found for the selected filters.
+                    {t('noData')}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -302,7 +304,9 @@ const ReportsPage = () => {
                       >
                         <div className="flex items-center gap-4">
                           <div>
-                            <p className="font-medium">{booking.unit?.name}</p>
+                            <p className="font-medium">
+                              {booking.unit?.type && getUnitTypeEmoji(booking.unit.type)} {booking.unit?.name}
+                            </p>
                             <p className="text-sm text-muted-foreground">
                               {booking.tenant_name} • {formatDateRange(booking.start_date, booking.end_date)}
                             </p>
@@ -329,6 +333,14 @@ const ReportsPage = () => {
             </Card>
           </>
         )}
+
+        {/* PDF Language Selection Modal */}
+        <PdfLanguageModal
+          open={pdfModalOpen}
+          onOpenChange={setPdfModalOpen}
+          onConfirm={handleExportPDF}
+          title="Export PDF Report"
+        />
       </div>
     </AppLayout>
   );
