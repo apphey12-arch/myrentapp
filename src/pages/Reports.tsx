@@ -18,12 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CalendarIcon, FileText, Loader2, TrendingUp, Calendar as CalendarIconLucide, DollarSign } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CalendarIcon, FileText, Loader2, TrendingUp, Calendar as CalendarIconLucide, DollarSign, Building2 } from 'lucide-react';
 import { format, parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { formatEGP, formatEGPCompact } from '@/lib/currency';
 import { formatDateRange } from '@/lib/date-utils';
-import { generateReportPDF } from '@/lib/pdf-generator';
+import { generateReportPDF, generateUnitPerformancePDF, UnitPerformanceData } from '@/lib/pdf-generator';
 import { DateRange } from 'react-day-picker';
 import { useLanguage, Language } from '@/contexts/LanguageContext';
 import { getUnitTypeEmoji } from '@/types/database';
@@ -37,6 +38,7 @@ const ReportsPage = () => {
     to: endOfMonth(new Date()),
   });
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [unitPdfModalOpen, setUnitPdfModalOpen] = useState(false);
 
   const { units, isLoading: unitsLoading } = useUnits();
   const { bookings, isLoading: bookingsLoading } = useBookings();
@@ -47,17 +49,14 @@ const ReportsPage = () => {
   // Filter bookings by date range and unit
   const filteredBookings = useMemo(() => {
     return bookings.filter((booking) => {
-      // Unit filter
       if (unitFilter !== 'all' && booking.unit_id !== unitFilter) {
         return false;
       }
 
-      // Date filter
       if (dateRange?.from && dateRange?.to) {
         const startDate = parseISO(booking.start_date);
         const endDate = parseISO(booking.end_date);
         
-        // Check if booking overlaps with date range
         const rangeOverlaps = 
           isWithinInterval(startDate, { start: dateRange.from, end: dateRange.to }) ||
           isWithinInterval(endDate, { start: dateRange.from, end: dateRange.to }) ||
@@ -79,11 +78,6 @@ const ReportsPage = () => {
       0
     );
 
-    const totalExpenses = expenses.reduce(
-      (sum, e) => sum + Number(e.amount),
-      0
-    );
-
     const occupiedDays = activeBookings.reduce(
       (sum, b) => sum + b.duration_days,
       0
@@ -95,14 +89,33 @@ const ReportsPage = () => {
 
     return {
       totalRevenue,
-      totalExpenses,
-      netIncome: totalRevenue - totalExpenses,
       totalBookings: filteredBookings.length,
       occupiedDays,
       avgDailyRate,
       confirmedBookings: filteredBookings.filter(b => b.status === 'Confirmed').length,
     };
-  }, [filteredBookings, expenses]);
+  }, [filteredBookings]);
+
+  // Calculate unit performance data
+  const unitPerformanceData = useMemo((): UnitPerformanceData[] => {
+    return units.map(unit => {
+      // Revenue from this unit
+      const unitBookings = bookings.filter(b => b.unit_id === unit.id && b.status !== 'Cancelled');
+      const totalRevenue = unitBookings.reduce((sum, b) => sum + Number(b.total_amount), 0);
+      
+      // Expenses for this unit
+      const unitExpenses = expenses.filter(e => e.unit_id === unit.id);
+      const totalExpenses = unitExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+      
+      return {
+        unitName: unit.name,
+        unitType: unit.type,
+        totalRevenue,
+        totalExpenses,
+        netProfit: totalRevenue - totalExpenses,
+      };
+    });
+  }, [units, bookings, expenses]);
 
   const handleExportPDF = async (language: Language) => {
     const activeBookings = filteredBookings.filter(b => b.status !== 'Cancelled');
@@ -115,8 +128,8 @@ const ReportsPage = () => {
         ? 'All Units' 
         : units.find(u => u.id === unitFilter)?.name || 'Unknown',
       totalRevenue: stats.totalRevenue,
-      totalExpenses: stats.totalExpenses,
-      netIncome: stats.netIncome,
+      totalExpenses: 0, // Removed from general report
+      netIncome: stats.totalRevenue,
       totalBookings: stats.totalBookings,
       occupiedDays: stats.occupiedDays,
       averageDailyRate: stats.avgDailyRate,
@@ -131,6 +144,14 @@ const ReportsPage = () => {
     }, language);
   };
 
+  const handleExportUnitPDF = async (language: Language) => {
+    const rangeString = dateRange?.from && dateRange?.to
+      ? `${format(dateRange.from, 'MMM d, yyyy')} - ${format(dateRange.to, 'MMM d, yyyy')}`
+      : 'All Time';
+    
+    await generateUnitPerformancePDF(unitPerformanceData, rangeString, language);
+  };
+
   return (
     <AppLayout>
       <div className="p-6 lg:p-8">
@@ -140,10 +161,6 @@ const ReportsPage = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">{t('reports')}</h1>
             <p className="text-muted-foreground mt-1">Financial analytics and insights</p>
           </div>
-          <Button onClick={() => setPdfModalOpen(true)} className="gradient-ocean gap-2">
-            <FileText className="h-4 w-4" />
-            Export PDF Report
-          </Button>
         </div>
 
         {/* Filters */}
@@ -212,134 +229,249 @@ const ReportsPage = () => {
           </CardContent>
         </Card>
 
-        {/* Stats */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-              <Card className="shadow-soft">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl gradient-ocean">
-                      <DollarSign className="h-7 w-7 text-primary-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">{t('totalRevenue')}</p>
-                      <p className="text-2xl font-bold text-foreground">
-                        {formatEGPCompact(stats.totalRevenue)}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+        {/* Report Tabs */}
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="overview" className="gap-2">
+              <DollarSign className="h-4 w-4" />
+              Revenue Overview
+            </TabsTrigger>
+            <TabsTrigger value="units" className="gap-2">
+              <Building2 className="h-4 w-4" />
+              Unit Performance
+            </TabsTrigger>
+          </TabsList>
 
-              <Card className="shadow-soft">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-success/10">
-                      <CalendarIconLucide className="h-7 w-7 text-success" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Occupied Days</p>
-                      <p className="text-2xl font-bold text-foreground">
-                        {stats.occupiedDays} days
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Overview Tab */}
+          <TabsContent value="overview">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-end mb-4">
+                  <Button onClick={() => setPdfModalOpen(true)} className="gradient-ocean gap-2">
+                    <FileText className="h-4 w-4" />
+                    Export PDF Report
+                  </Button>
+                </div>
 
-              <Card className="shadow-soft">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-warning/10">
-                      <TrendingUp className="h-7 w-7 text-warning" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">{t('avgDailyRate')}</p>
-                      <p className="text-2xl font-bold text-foreground">
-                        {formatEGP(stats.avgDailyRate)}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="shadow-soft">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/20">
-                      <FileText className="h-7 w-7 text-accent-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">{t('totalBookings')}</p>
-                      <p className="text-2xl font-bold text-foreground">
-                        {stats.totalBookings}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Bookings List */}
-            <Card className="shadow-soft">
-              <CardHeader>
-                <CardTitle>Bookings in Range</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {filteredBookings.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    {t('noData')}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {filteredBookings.slice(0, 10).map((booking) => (
-                      <div
-                        key={booking.id}
-                        className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <p className="font-medium">
-                              {booking.unit?.type && getUnitTypeEmoji(booking.unit.type)} {booking.unit?.name}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {booking.tenant_name} • {formatDateRange(booking.start_date, booking.end_date)}
-                            </p>
-                          </div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                  <Card className="shadow-soft">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl gradient-ocean">
+                          <DollarSign className="h-7 w-7 text-primary-foreground" />
                         </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-primary">
-                            {formatEGP(booking.total_amount)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {booking.duration_days} days @ {formatEGP(booking.daily_rate)}/day
+                        <div>
+                          <p className="text-sm text-muted-foreground">{t('totalRevenue')}</p>
+                          <p className="text-2xl font-bold text-foreground">
+                            {formatEGPCompact(stats.totalRevenue)}
                           </p>
                         </div>
                       </div>
-                    ))}
-                    {filteredBookings.length > 10 && (
-                      <p className="text-center text-sm text-muted-foreground pt-2">
-                        And {filteredBookings.length - 10} more bookings...
-                      </p>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </>
-        )}
+                    </CardContent>
+                  </Card>
 
-        {/* PDF Language Selection Modal */}
+                  <Card className="shadow-soft">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-success/10">
+                          <CalendarIconLucide className="h-7 w-7 text-success" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Occupied Days</p>
+                          <p className="text-2xl font-bold text-foreground">
+                            {stats.occupiedDays} days
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="shadow-soft">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-warning/10">
+                          <TrendingUp className="h-7 w-7 text-warning" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">{t('avgDailyRate')}</p>
+                          <p className="text-2xl font-bold text-foreground">
+                            {formatEGP(stats.avgDailyRate)}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="shadow-soft">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/20">
+                          <FileText className="h-7 w-7 text-accent-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">{t('totalBookings')}</p>
+                          <p className="text-2xl font-bold text-foreground">
+                            {stats.totalBookings}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Bookings List */}
+                <Card className="shadow-soft">
+                  <CardHeader>
+                    <CardTitle>Bookings in Range</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {filteredBookings.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        {t('noData')}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {filteredBookings.slice(0, 10).map((booking) => (
+                          <div
+                            key={booking.id}
+                            className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                          >
+                            <div className="flex items-center gap-4">
+                              <div>
+                                <p className="font-medium">
+                                  {booking.unit?.type && getUnitTypeEmoji(booking.unit.type)} {booking.unit?.name}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {booking.tenant_name} • {formatDateRange(booking.start_date, booking.end_date)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-semibold text-primary">
+                                {formatEGP(booking.total_amount)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {booking.duration_days} days @ {formatEGP(booking.daily_rate)}/day
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                        {filteredBookings.length > 10 && (
+                          <p className="text-center text-sm text-muted-foreground pt-2">
+                            And {filteredBookings.length - 10} more bookings...
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+
+          {/* Unit Performance Tab */}
+          <TabsContent value="units">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-end mb-4">
+                  <Button onClick={() => setUnitPdfModalOpen(true)} className="gradient-ocean gap-2">
+                    <FileText className="h-4 w-4" />
+                    Export Profit Report
+                  </Button>
+                </div>
+
+                <Card className="shadow-soft">
+                  <CardHeader>
+                    <CardTitle>Unit Financials</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {unitPerformanceData.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No units found. Add units to see performance data.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('unit')}</th>
+                              <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('type')}</th>
+                              <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t('totalRevenue')}</th>
+                              <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t('totalExpenses')}</th>
+                              <th className="text-right py-3 px-4 font-medium text-muted-foreground">Net Profit</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {unitPerformanceData.map((unit, index) => (
+                              <tr key={index} className="border-b hover:bg-secondary/30 transition-colors">
+                                <td className="py-3 px-4 font-medium">
+                                  {getUnitTypeEmoji(unit.unitType)} {unit.unitName}
+                                </td>
+                                <td className="py-3 px-4 text-muted-foreground">{unit.unitType}</td>
+                                <td className="py-3 px-4 text-right text-success font-medium">
+                                  {formatEGP(unit.totalRevenue)}
+                                </td>
+                                <td className="py-3 px-4 text-right text-destructive font-medium">
+                                  {formatEGP(unit.totalExpenses)}
+                                </td>
+                                <td className={cn(
+                                  "py-3 px-4 text-right font-bold",
+                                  unit.netProfit >= 0 ? "text-success" : "text-destructive"
+                                )}>
+                                  {unit.netProfit >= 0 ? '+' : ''}{formatEGP(unit.netProfit)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-secondary/50 font-bold">
+                              <td className="py-3 px-4" colSpan={2}>Total</td>
+                              <td className="py-3 px-4 text-right text-success">
+                                {formatEGP(unitPerformanceData.reduce((sum, u) => sum + u.totalRevenue, 0))}
+                              </td>
+                              <td className="py-3 px-4 text-right text-destructive">
+                                {formatEGP(unitPerformanceData.reduce((sum, u) => sum + u.totalExpenses, 0))}
+                              </td>
+                              <td className={cn(
+                                "py-3 px-4 text-right",
+                                unitPerformanceData.reduce((sum, u) => sum + u.netProfit, 0) >= 0 ? "text-success" : "text-destructive"
+                              )}>
+                                {unitPerformanceData.reduce((sum, u) => sum + u.netProfit, 0) >= 0 ? '+' : ''}
+                                {formatEGP(unitPerformanceData.reduce((sum, u) => sum + u.netProfit, 0))}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {/* PDF Language Selection Modals */}
         <PdfLanguageModal
           open={pdfModalOpen}
           onOpenChange={setPdfModalOpen}
           onConfirm={handleExportPDF}
           title="Export PDF Report"
+        />
+        
+        <PdfLanguageModal
+          open={unitPdfModalOpen}
+          onOpenChange={setUnitPdfModalOpen}
+          onConfirm={handleExportUnitPDF}
+          title="Export Unit Performance Report"
         />
       </div>
     </AppLayout>

@@ -1,8 +1,12 @@
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import autoTable from 'jspdf-autotable';
 import { formatEGP } from './currency';
 import { BookingStatus, UnitType, PaymentStatus, getUnitTypeEmoji } from '@/types/database';
 import { Language } from '@/contexts/LanguageContext';
+
+// Amiri font embedded as Base64 (subset for Arabic support)
+// This is a minimal subset that supports Arabic numerals and common characters
+const AMIRI_FONT_BASE64 = `AAEAAAAPAIAAAwBwT1MvMlYJXhkAAAD8AAAAVmNtYXDb+xEsAAABVAAAAUpjdnQgAAAAAAAAAsAAAAACZ2FzcP//AAMAAALEAAAACGdseWZ5`; // Placeholder - will load dynamically
 
 // PDF text labels in both languages
 const pdfLabels = {
@@ -46,6 +50,10 @@ const pdfLabels = {
     tenant: 'Tenant',
     dates: 'Dates',
     depositNote: '* Deposit is refundable and not included in Total Rent',
+    unitPerformance: 'Unit Performance Report',
+    netProfit: 'Net Profit',
+    page: 'Page',
+    of: 'of',
   },
   ar: {
     title: 'صن لايت فيليج',
@@ -87,7 +95,89 @@ const pdfLabels = {
     tenant: 'المستأجر',
     dates: 'التواريخ',
     depositNote: '* التأمين مبلغ مسترد ولا يدخل ضمن إجمالي الإيجار',
+    unitPerformance: 'تقرير أداء الوحدات',
+    netProfit: 'صافي الربح',
+    page: 'صفحة',
+    of: 'من',
   },
+};
+
+// Load Arabic font dynamically
+const loadArabicFont = async (): Promise<string> => {
+  try {
+    // Use Amiri font for better Arabic support
+    const response = await fetch('https://fonts.gstatic.com/s/amiri/v27/J7aRnpd8CGxBHpUrtLMA7w.ttf');
+    const blob = await response.blob();
+    
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('Failed to load Arabic font:', error);
+    throw error;
+  }
+};
+
+// Setup PDF with Arabic font
+const setupPdfWithFont = async (pdf: jsPDF, isArabic: boolean): Promise<void> => {
+  if (isArabic) {
+    try {
+      const fontBase64 = await loadArabicFont();
+      pdf.addFileToVFS('Amiri-Regular.ttf', fontBase64);
+      pdf.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
+      pdf.setFont('Amiri');
+    } catch (error) {
+      console.error('Failed to setup Arabic font, falling back to default:', error);
+      pdf.setFont('helvetica');
+    }
+  } else {
+    pdf.setFont('helvetica');
+  }
+};
+
+// Reverse Arabic text for RTL rendering in jsPDF
+const processArabicText = (text: string, isArabic: boolean): string => {
+  if (!isArabic) return text;
+  // jsPDF doesn't handle RTL well, so we need to reverse the text order
+  return text.split('').reverse().join('');
+};
+
+// Add header to PDF page
+const addPdfHeader = (pdf: jsPDF, title: string, subtitle: string, isArabic: boolean) => {
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  
+  // Header background
+  pdf.setFillColor(14, 116, 144); // Primary cyan
+  pdf.rect(0, 0, pageWidth, 40, 'F');
+  
+  // Title
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(22);
+  const titleText = isArabic ? processArabicText(title, true) : title;
+  pdf.text(titleText, pageWidth / 2, 18, { align: 'center' });
+  
+  // Subtitle
+  pdf.setFontSize(12);
+  const subtitleText = isArabic ? processArabicText(subtitle, true) : subtitle;
+  pdf.text(subtitleText, pageWidth / 2, 30, { align: 'center' });
+  
+  pdf.setTextColor(0, 0, 0);
+};
+
+// Add page number footer
+const addPageNumber = (pdf: jsPDF, currentPage: number, totalPages: number, labels: typeof pdfLabels.en) => {
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  
+  pdf.setFontSize(10);
+  pdf.setTextColor(128, 128, 128);
+  pdf.text(`${labels.page} ${currentPage} ${labels.of} ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
 };
 
 interface BookingReceiptData {
@@ -107,59 +197,6 @@ interface BookingReceiptData {
   depositPaid: boolean;
 }
 
-// Create a hidden container for PDF rendering with proper Arabic font
-const createPdfContainer = (isArabic: boolean): HTMLDivElement => {
-  const container = document.createElement('div');
-  container.style.cssText = `
-    position: fixed;
-    left: -9999px;
-    top: 0;
-    width: 595px;
-    padding: 40px;
-    background: white;
-    font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
-    direction: ${isArabic ? 'rtl' : 'ltr'};
-    text-align: ${isArabic ? 'right' : 'left'};
-    color: #1a1a1a;
-    font-size: 12px;
-    line-height: 1.5;
-  `;
-  document.body.appendChild(container);
-  return container;
-};
-
-// Generate PDF from HTML element using html2canvas
-const generatePdfFromElement = async (element: HTMLElement, filename: string) => {
-  const canvas = await html2canvas(element, {
-    scale: 2,
-    useCORS: true,
-    logging: false,
-    backgroundColor: '#ffffff',
-  });
-  
-  const pdf = new jsPDF('p', 'mm', 'a4');
-  const imgData = canvas.toDataURL('image/png');
-  const imgWidth = 190;
-  const pageHeight = 277;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-  
-  let heightLeft = imgHeight;
-  let position = 10;
-  
-  pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-  heightLeft -= pageHeight;
-  
-  // Handle multi-page PDFs
-  while (heightLeft > 0) {
-    position = heightLeft - imgHeight + 10;
-    pdf.addPage();
-    pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-  }
-  
-  pdf.save(filename);
-};
-
 export const generateBookingPDF = async (data: BookingReceiptData, language: Language = 'en') => {
   const labels = pdfLabels[language];
   const isArabic = language === 'ar';
@@ -168,138 +205,169 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   const housekeepingAmount = data.housekeepingAmount || 0;
   const totalRent = baseAmount + housekeepingAmount;
   
-  const container = createPdfContainer(isArabic);
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  await setupPdfWithFont(pdf, isArabic);
   
-  container.innerHTML = `
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
-      * { font-family: 'Cairo', sans-serif !important; box-sizing: border-box; margin: 0; padding: 0; }
-      .header { background: linear-gradient(135deg, #0e7490 0%, #0891b2 100%); color: white; padding: 30px; margin: -40px -40px 30px -40px; text-align: center; }
-      .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
-      .header p { font-size: 14px; opacity: 0.9; }
-      .date-badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 6px 16px; border-radius: 20px; margin-top: 12px; font-size: 12px; }
-      .section { margin-bottom: 24px; }
-      .section-title { font-size: 14px; font-weight: 700; color: #0e7490; border-bottom: 2px solid #0e7490; padding-bottom: 8px; margin-bottom: 16px; }
-      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      .info-item { background: #f8fafc; padding: 12px 16px; border-radius: 8px; border-${isArabic ? 'right' : 'left'}: 3px solid #0e7490; }
-      .info-item label { font-size: 10px; color: #64748b; display: block; margin-bottom: 4px; }
-      .info-item span { font-size: 14px; font-weight: 600; color: #1e293b; }
-      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-      th { background: #0e7490; color: white; padding: 12px 16px; font-size: 12px; font-weight: 600; text-align: ${isArabic ? 'right' : 'left'}; }
-      td { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 12px; }
-      tr:nth-child(even) { background: #f8fafc; }
-      .total-row { background: #fef3c7 !important; }
-      .total-row td { font-weight: 700; font-size: 14px; color: #92400e; }
-      .deposit-row td { font-style: italic; color: #64748b; }
-      .note { font-size: 10px; color: #64748b; margin-top: 12px; padding: 10px; background: #f1f5f9; border-radius: 6px; }
-      .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; }
-      .footer p { color: #64748b; font-size: 11px; }
-      .status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; }
-      .status-confirmed { background: #dcfce7; color: #166534; }
-      .status-unconfirmed { background: #fef3c7; color: #92400e; }
-      .status-cancelled { background: #fee2e2; color: #991b1b; }
-      .payment-paid { background: #dcfce7; color: #166534; }
-      .payment-pending { background: #fef3c7; color: #92400e; }
-      .payment-overdue { background: #fee2e2; color: #991b1b; }
-    </style>
-    
-    <div class="header">
-      <h1>${labels.title}</h1>
-      <p>${labels.subtitle}</p>
-      <div class="date-badge">${labels.date}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}</div>
-    </div>
-    
-    <div class="section">
-      <div class="section-title">${labels.tenantInfo}</div>
-      <div class="info-grid">
-        <div class="info-item">
-          <label>${labels.name}</label>
-          <span>${data.tenantName}</span>
-        </div>
-        <div class="info-item">
-          <label>${labels.phone}</label>
-          <span>${data.phoneNumber || 'N/A'}</span>
-        </div>
-        <div class="info-item">
-          <label>${labels.status}</label>
-          <span class="status-badge status-${data.status.toLowerCase()}">${data.status}</span>
-        </div>
-        <div class="info-item">
-          <label>${labels.payment}</label>
-          <span class="status-badge payment-${(data.paymentStatus || 'pending').toLowerCase()}">${data.paymentStatus || 'N/A'}</span>
-        </div>
-      </div>
-    </div>
-    
-    <div class="section">
-      <div class="section-title">${labels.propertyDetails}</div>
-      <div class="info-grid">
-        <div class="info-item">
-          <label>${labels.unit}</label>
-          <span>${getUnitTypeEmoji(data.unitType)} ${data.unitName}</span>
-        </div>
-        <div class="info-item">
-          <label>${labels.type}</label>
-          <span>${data.unitType}</span>
-        </div>
-        <div class="info-item">
-          <label>${labels.checkIn}</label>
-          <span>${data.startDate}</span>
-        </div>
-        <div class="info-item">
-          <label>${labels.checkOut}</label>
-          <span>${data.endDate}</span>
-        </div>
-      </div>
-    </div>
-    
-    <div class="section">
-      <div class="section-title">${labels.pricing}</div>
-      <table>
-        <thead>
-          <tr>
-            <th>${labels.description}</th>
-            <th>${labels.amount}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>${labels.dailyRate} × ${data.durationDays} ${labels.days}</td>
-            <td>${formatEGP(baseAmount)}</td>
-          </tr>
-          ${housekeepingAmount > 0 ? `
-          <tr>
-            <td>${labels.housekeeping}</td>
-            <td>${formatEGP(housekeepingAmount)}</td>
-          </tr>
-          ` : ''}
-          <tr class="total-row">
-            <td>${labels.totalRent}</td>
-            <td>${formatEGP(totalRent)}</td>
-          </tr>
-          ${data.depositAmount && data.depositAmount > 0 ? `
-          <tr class="deposit-row">
-            <td>${labels.refundableDeposit} *</td>
-            <td>${formatEGP(data.depositAmount)}</td>
-          </tr>
-          ` : ''}
-        </tbody>
-      </table>
-      ${data.depositAmount && data.depositAmount > 0 ? `
-      <div class="note">${labels.depositNote}</div>
-      ` : ''}
-    </div>
-    
-    <div class="footer">
-      <p>${labels.thanks}</p>
-    </div>
-  `;
+  const pageWidth = pdf.internal.pageSize.getWidth();
   
-  try {
-    await generatePdfFromElement(container, `booking-receipt-${data.tenantName.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-') || 'booking'}.pdf`);
-  } finally {
-    document.body.removeChild(container);
+  // Header
+  addPdfHeader(pdf, labels.title, labels.subtitle, isArabic);
+  
+  // Date
+  pdf.setFontSize(10);
+  pdf.setTextColor(100, 100, 100);
+  const dateText = `${labels.date}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`;
+  pdf.text(dateText, pageWidth / 2, 50, { align: 'center' });
+  
+  let yPos = 60;
+  
+  // Tenant Info Section
+  pdf.setFontSize(14);
+  pdf.setTextColor(14, 116, 144);
+  pdf.text(isArabic ? processArabicText(labels.tenantInfo, true) : labels.tenantInfo, isArabic ? pageWidth - 15 : 15, yPos);
+  yPos += 5;
+  
+  pdf.setDrawColor(14, 116, 144);
+  pdf.setLineWidth(0.5);
+  pdf.line(15, yPos, pageWidth - 15, yPos);
+  yPos += 10;
+  
+  // Tenant details table
+  autoTable(pdf, {
+    startY: yPos,
+    head: [],
+    body: [
+      [labels.name, data.tenantName],
+      [labels.phone, data.phoneNumber || 'N/A'],
+      [labels.status, data.status],
+      [labels.payment, data.paymentStatus || 'Pending'],
+    ],
+    theme: 'plain',
+    styles: {
+      fontSize: 11,
+      cellPadding: 4,
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 50, textColor: [100, 100, 100] },
+      1: { cellWidth: 'auto' },
+    },
+    margin: { left: 15, right: 15 },
+  });
+  
+  yPos = (pdf as any).lastAutoTable.finalY + 15;
+  
+  // Property Details Section
+  pdf.setFontSize(14);
+  pdf.setTextColor(14, 116, 144);
+  pdf.text(isArabic ? processArabicText(labels.propertyDetails, true) : labels.propertyDetails, isArabic ? pageWidth - 15 : 15, yPos);
+  yPos += 5;
+  
+  pdf.line(15, yPos, pageWidth - 15, yPos);
+  yPos += 10;
+  
+  autoTable(pdf, {
+    startY: yPos,
+    head: [],
+    body: [
+      [labels.unit, `${getUnitTypeEmoji(data.unitType)} ${data.unitName}`],
+      [labels.type, data.unitType],
+      [labels.checkIn, data.startDate],
+      [labels.checkOut, data.endDate],
+      [labels.duration, `${data.durationDays} ${labels.days}`],
+    ],
+    theme: 'plain',
+    styles: {
+      fontSize: 11,
+      cellPadding: 4,
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 50, textColor: [100, 100, 100] },
+      1: { cellWidth: 'auto' },
+    },
+    margin: { left: 15, right: 15 },
+  });
+  
+  yPos = (pdf as any).lastAutoTable.finalY + 15;
+  
+  // Pricing Section
+  pdf.setFontSize(14);
+  pdf.setTextColor(14, 116, 144);
+  pdf.text(isArabic ? processArabicText(labels.pricing, true) : labels.pricing, isArabic ? pageWidth - 15 : 15, yPos);
+  yPos += 5;
+  
+  pdf.line(15, yPos, pageWidth - 15, yPos);
+  yPos += 10;
+  
+  const pricingData: (string | number)[][] = [
+    [labels.description, labels.amount],
+    [`${labels.dailyRate} × ${data.durationDays} ${labels.days}`, formatEGP(baseAmount)],
+  ];
+  
+  if (housekeepingAmount > 0) {
+    pricingData.push([labels.housekeeping, formatEGP(housekeepingAmount)]);
   }
+  
+  pricingData.push([labels.totalRent, formatEGP(totalRent)]);
+  
+  if (data.depositAmount && data.depositAmount > 0) {
+    pricingData.push([`${labels.refundableDeposit} *`, formatEGP(data.depositAmount)]);
+  }
+  
+  autoTable(pdf, {
+    startY: yPos,
+    head: [[labels.description, labels.amount]],
+    body: pricingData.slice(1),
+    theme: 'striped',
+    styles: {
+      fontSize: 11,
+      cellPadding: 5,
+    },
+    headStyles: {
+      fillColor: [14, 116, 144],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+    },
+    columnStyles: {
+      0: { cellWidth: 'auto' },
+      1: { cellWidth: 50, halign: 'right' },
+    },
+    margin: { left: 15, right: 15 },
+    didParseCell: (data) => {
+      // Highlight total row
+      if (data.row.index === pricingData.length - 3 || 
+          (data.row.raw && (data.row.raw as string[])[0]?.includes(labels.totalRent))) {
+        data.cell.styles.fillColor = [254, 243, 199];
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.textColor = [146, 64, 14];
+      }
+      // Style deposit row
+      if (data.row.raw && (data.row.raw as string[])[0]?.includes('*')) {
+        data.cell.styles.fontStyle = 'italic';
+        data.cell.styles.textColor = [100, 100, 100];
+      }
+    },
+  });
+  
+  yPos = (pdf as any).lastAutoTable.finalY + 10;
+  
+  // Deposit note
+  if (data.depositAmount && data.depositAmount > 0) {
+    pdf.setFontSize(9);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text(labels.depositNote, 15, yPos);
+    yPos += 15;
+  }
+  
+  // Footer
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  pdf.setDrawColor(200, 200, 200);
+  pdf.line(15, pageHeight - 25, pageWidth - 15, pageHeight - 25);
+  
+  pdf.setFontSize(11);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text(labels.thanks, pageWidth / 2, pageHeight - 15, { align: 'center' });
+  
+  pdf.save(`booking-receipt-${data.tenantName.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-') || 'booking'}.pdf`);
 };
 
 interface ReportData {
@@ -325,116 +393,217 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
   const labels = pdfLabels[language];
   const isArabic = language === 'ar';
   
-  const container = createPdfContainer(isArabic);
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  await setupPdfWithFont(pdf, isArabic);
   
-  const bookingsHtml = data.bookings.map(b => `
-    <tr>
-      <td>${b.unitName}</td>
-      <td>${b.tenantName}</td>
-      <td>${b.dates}</td>
-      <td>${formatEGP(b.amount)}</td>
-      <td>${b.status}</td>
-      <td>${b.paymentStatus}</td>
-    </tr>
-  `).join('');
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
   
-  container.innerHTML = `
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
-      * { font-family: 'Cairo', sans-serif !important; box-sizing: border-box; margin: 0; padding: 0; }
-      .header { background: linear-gradient(135deg, #0e7490 0%, #0891b2 100%); color: white; padding: 30px; margin: -40px -40px 30px -40px; text-align: center; }
-      .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
-      .header p { font-size: 14px; opacity: 0.9; }
-      .date-badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 6px 16px; border-radius: 20px; margin-top: 12px; font-size: 12px; }
-      .filters { display: flex; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
-      .filter-item { background: #f1f5f9; padding: 10px 16px; border-radius: 8px; }
-      .filter-item label { font-size: 10px; color: #64748b; display: block; }
-      .filter-item span { font-size: 12px; font-weight: 600; }
-      .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 30px; }
-      .stat-card { background: #f8fafc; border-radius: 12px; padding: 20px; text-align: center; border: 1px solid #e2e8f0; }
-      .stat-card label { font-size: 10px; color: #64748b; display: block; margin-bottom: 8px; text-transform: uppercase; }
-      .stat-card .value { font-size: 20px; font-weight: 700; }
-      .stat-card.revenue .value { color: #0e7490; }
-      .stat-card.expenses .value { color: #dc2626; }
-      .stat-card.profit .value { color: ${data.netIncome >= 0 ? '#16a34a' : '#dc2626'}; }
-      .section-title { font-size: 14px; font-weight: 700; color: #0e7490; border-bottom: 2px solid #0e7490; padding-bottom: 8px; margin-bottom: 16px; }
-      table { width: 100%; border-collapse: collapse; font-size: 10px; }
-      th { background: #0e7490; color: white; padding: 10px 12px; font-weight: 600; text-align: ${isArabic ? 'right' : 'left'}; }
-      td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
-      tr:nth-child(even) { background: #f8fafc; }
-      .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; }
-      .footer p { color: #64748b; font-size: 11px; }
-    </style>
-    
-    <div class="header">
-      <h1>${labels.title}</h1>
-      <p>${labels.reportTitle}</p>
-      <div class="date-badge">${labels.generated}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}</div>
-    </div>
-    
-    <div class="filters">
-      <div class="filter-item">
-        <label>${labels.dateRange}</label>
-        <span>${data.dateRange}</span>
-      </div>
-      <div class="filter-item">
-        <label>${labels.scope}</label>
-        <span>${data.unitScope}</span>
-      </div>
-    </div>
-    
-    <div class="stats-grid">
-      <div class="stat-card revenue">
-        <label>${labels.totalRevenue}</label>
-        <div class="value">${formatEGP(data.totalRevenue)}</div>
-      </div>
-      <div class="stat-card expenses">
-        <label>${labels.totalExpenses}</label>
-        <div class="value">${formatEGP(data.totalExpenses)}</div>
-      </div>
-      <div class="stat-card profit">
-        <label>${labels.netIncome}</label>
-        <div class="value">${data.netIncome >= 0 ? '+' : ''}${formatEGP(data.netIncome)}</div>
-      </div>
-      <div class="stat-card">
-        <label>${labels.totalBookings}</label>
-        <div class="value">${data.totalBookings}</div>
-      </div>
-      <div class="stat-card">
-        <label>${labels.occupiedDays}</label>
-        <div class="value">${data.occupiedDays} ${labels.days}</div>
-      </div>
-      <div class="stat-card">
-        <label>${labels.avgDailyRate}</label>
-        <div class="value">${formatEGP(data.averageDailyRate)}</div>
-      </div>
-    </div>
-    
-    <div class="section-title">${labels.totalBookings}</div>
-    <table>
-      <thead>
-        <tr>
-          <th>${labels.unit}</th>
-          <th>${labels.tenant}</th>
-          <th>${labels.dates}</th>
-          <th>${labels.amount}</th>
-          <th>${labels.status}</th>
-          <th>${labels.payment}</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${bookingsHtml}
-      </tbody>
-    </table>
-    
-    <div class="footer">
-      <p>Sunlight Village Property Management System</p>
-    </div>
-  `;
+  // Header
+  addPdfHeader(pdf, labels.title, labels.reportTitle, isArabic);
   
-  try {
-    await generatePdfFromElement(container, `report-${data.dateRange.replace(/\s+/g, '-')}.pdf`);
-  } finally {
-    document.body.removeChild(container);
+  // Date and filters
+  pdf.setFontSize(10);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text(`${labels.generated}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`, pageWidth / 2, 50, { align: 'center' });
+  pdf.text(`${labels.dateRange}: ${data.dateRange} | ${labels.scope}: ${data.unitScope}`, pageWidth / 2, 57, { align: 'center' });
+  
+  let yPos = 70;
+  
+  // Summary Stats
+  const statsData = [
+    [labels.totalRevenue, formatEGP(data.totalRevenue)],
+    [labels.totalBookings, data.totalBookings.toString()],
+    [labels.occupiedDays, `${data.occupiedDays} ${labels.days}`],
+    [labels.avgDailyRate, formatEGP(data.averageDailyRate)],
+  ];
+  
+  autoTable(pdf, {
+    startY: yPos,
+    head: [],
+    body: statsData,
+    theme: 'plain',
+    styles: {
+      fontSize: 12,
+      cellPadding: 6,
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', textColor: [100, 100, 100] },
+      1: { fontStyle: 'bold', halign: 'right', textColor: [14, 116, 144] },
+    },
+    margin: { left: 15, right: 15 },
+  });
+  
+  yPos = (pdf as any).lastAutoTable.finalY + 15;
+  
+  // Bookings table with auto-pagination
+  pdf.setFontSize(14);
+  pdf.setTextColor(14, 116, 144);
+  pdf.text(labels.totalBookings, 15, yPos);
+  yPos += 8;
+  
+  autoTable(pdf, {
+    startY: yPos,
+    head: [[labels.unit, labels.tenant, labels.dates, labels.amount, labels.status, labels.payment]],
+    body: data.bookings.map(b => [
+      b.unitName,
+      b.tenantName,
+      b.dates,
+      formatEGP(b.amount),
+      b.status,
+      b.paymentStatus,
+    ]),
+    theme: 'striped',
+    styles: {
+      fontSize: 9,
+      cellPadding: 4,
+    },
+    headStyles: {
+      fillColor: [14, 116, 144],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+    },
+    margin: { left: 15, right: 15 },
+    // Auto-pagination: this will automatically create new pages
+    showHead: 'everyPage',
+    didDrawPage: (data) => {
+      // Add page number to each page
+      const pageCount = pdf.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        addPageNumber(pdf, i, pageCount, labels);
+      }
+    },
+  });
+  
+  // Footer on last page
+  const lastPage = pdf.getNumberOfPages();
+  pdf.setPage(lastPage);
+  pdf.setFontSize(10);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text('Sunlight Village Property Management System', pageWidth / 2, pageHeight - 20, { align: 'center' });
+  
+  pdf.save(`report-${data.dateRange.replace(/\s+/g, '-')}.pdf`);
+};
+
+// New: Unit Performance Report
+export interface UnitPerformanceData {
+  unitName: string;
+  unitType: UnitType;
+  totalRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
+}
+
+export const generateUnitPerformancePDF = async (
+  units: UnitPerformanceData[],
+  dateRange: string,
+  language: Language = 'en'
+) => {
+  const labels = pdfLabels[language];
+  const isArabic = language === 'ar';
+  
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  await setupPdfWithFont(pdf, isArabic);
+  
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  
+  // Header
+  addPdfHeader(pdf, labels.title, labels.unitPerformance, isArabic);
+  
+  // Date
+  pdf.setFontSize(10);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text(`${labels.generated}: ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US')}`, pageWidth / 2, 50, { align: 'center' });
+  pdf.text(`${labels.dateRange}: ${dateRange}`, pageWidth / 2, 57, { align: 'center' });
+  
+  let yPos = 70;
+  
+  // Calculate totals
+  const totalRevenue = units.reduce((sum, u) => sum + u.totalRevenue, 0);
+  const totalExpenses = units.reduce((sum, u) => sum + u.totalExpenses, 0);
+  const totalNetProfit = totalRevenue - totalExpenses;
+  
+  // Summary
+  autoTable(pdf, {
+    startY: yPos,
+    head: [],
+    body: [
+      [labels.totalRevenue, formatEGP(totalRevenue)],
+      [labels.totalExpenses, formatEGP(totalExpenses)],
+      [labels.netProfit, formatEGP(totalNetProfit)],
+    ],
+    theme: 'plain',
+    styles: {
+      fontSize: 12,
+      cellPadding: 6,
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', textColor: [100, 100, 100] },
+      1: { fontStyle: 'bold', halign: 'right' },
+    },
+    margin: { left: 15, right: 15 },
+    didParseCell: (data) => {
+      if (data.row.index === 0) {
+        data.cell.styles.textColor = [22, 163, 74]; // Green for revenue
+      } else if (data.row.index === 1) {
+        data.cell.styles.textColor = [220, 38, 38]; // Red for expenses
+      } else if (data.row.index === 2 && data.column.index === 1) {
+        data.cell.styles.textColor = totalNetProfit >= 0 ? [22, 163, 74] : [220, 38, 38];
+      }
+    },
+  });
+  
+  yPos = (pdf as any).lastAutoTable.finalY + 20;
+  
+  // Units performance table
+  autoTable(pdf, {
+    startY: yPos,
+    head: [[labels.unit, labels.type, labels.totalRevenue, labels.totalExpenses, labels.netProfit]],
+    body: units.map(u => [
+      `${getUnitTypeEmoji(u.unitType)} ${u.unitName}`,
+      u.unitType,
+      formatEGP(u.totalRevenue),
+      formatEGP(u.totalExpenses),
+      formatEGP(u.netProfit),
+    ]),
+    theme: 'striped',
+    styles: {
+      fontSize: 10,
+      cellPadding: 5,
+    },
+    headStyles: {
+      fillColor: [14, 116, 144],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+    },
+    margin: { left: 15, right: 15 },
+    showHead: 'everyPage',
+    didParseCell: (data) => {
+      // Color net profit column
+      if (data.column.index === 4 && data.section === 'body') {
+        const unit = units[data.row.index];
+        if (unit) {
+          data.cell.styles.textColor = unit.netProfit >= 0 ? [22, 163, 74] : [220, 38, 38];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    },
+  });
+  
+  // Page numbers
+  const pageCount = pdf.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    pdf.setPage(i);
+    addPageNumber(pdf, i, pageCount, labels);
   }
+  
+  // Footer
+  pdf.setPage(pageCount);
+  pdf.setFontSize(10);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text('Sunlight Village Property Management System', pageWidth / 2, pageHeight - 20, { align: 'center' });
+  
+  pdf.save(`unit-performance-${dateRange.replace(/\s+/g, '-')}.pdf`);
 };
