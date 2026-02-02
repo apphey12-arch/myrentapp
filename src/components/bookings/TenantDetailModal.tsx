@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Booking, getUnitTypeEmoji } from '@/types/database';
 import {
   Dialog,
@@ -11,10 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { formatEGP } from '@/lib/currency';
 import { formatDateRange } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
-import { useLanguage, Language } from '@/contexts/LanguageContext';
-import { generateBookingPDF } from '@/lib/pdf-generator';
-import { PdfLanguageModal } from '@/components/pdf/PdfLanguageModal';
-import { FileText, Phone, MessageCircle, Calendar, Home } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { Phone, MessageCircle, Calendar, Home } from 'lucide-react';
 
 interface TenantDetailModalProps {
   open: boolean;
@@ -43,7 +40,6 @@ const openWhatsApp = (phone: string, tenantName: string) => {
 
 export const TenantDetailModal = ({ open, onOpenChange, booking }: TenantDetailModalProps) => {
   const { t } = useLanguage();
-  const [pdfModalOpen, setPdfModalOpen] = useState(false);
 
   if (!booking) return null;
 
@@ -52,183 +48,143 @@ export const TenantDetailModal = ({ open, onOpenChange, booking }: TenantDetailM
   const housekeepingAmount = booking.housekeeping_amount || 0;
   const totalRent = baseAmount + housekeepingAmount;
 
-  const handlePrintReceipt = async (language: Language) => {
-    await generateBookingPDF({
-      tenantName: booking.tenant_name,
-      phoneNumber: booking.phone_number,
-      unitName: booking.unit?.name || 'Unknown',
-      unitType: booking.unit?.type || 'Villa',
-      startDate: booking.start_date,
-      endDate: booking.end_date,
-      durationDays: booking.duration_days,
-      dailyRate: booking.daily_rate,
-      depositAmount: booking.deposit_amount,
-      housekeepingAmount: booking.housekeeping_amount,
-      totalAmount: totalRent,
-      status: booking.status,
-      paymentStatus: booking.payment_status,
-      depositPaid: booking.deposit_paid,
-    }, language);
-  };
-
   return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-display flex items-center gap-2">
-              <span className="text-2xl">{booking.tenant_name}</span>
-            </DialogTitle>
-          </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="font-display flex items-center gap-2">
+            <span className="text-2xl">{booking.tenant_name}</span>
+          </DialogTitle>
+        </DialogHeader>
 
-          <div className="space-y-6 mt-4">
-            {/* Contact Info */}
-            <div className="space-y-3">
-              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-                {t('tenantInformation')}
-              </h3>
-              
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                  <Phone className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-muted-foreground">{t('phoneNumber')}</p>
-                  <p className="font-medium">{booking.phone_number || '—'}</p>
-                </div>
-                {booking.phone_number && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-green-500 hover:text-green-600 hover:bg-green-50"
-                    onClick={() => openWhatsApp(booking.phone_number!, booking.tenant_name)}
-                  >
-                    <MessageCircle className="h-5 w-5" />
-                  </Button>
-                )}
+        <div className="space-y-6 mt-4">
+          {/* Contact Info */}
+          <div className="space-y-3">
+            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+              {t('tenantInformation')}
+            </h3>
+            
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                <Phone className="h-5 w-5 text-primary" />
               </div>
-            </div>
-
-            {/* Property Details */}
-            <div className="space-y-3">
-              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-                {t('propertyDetails')}
-              </h3>
-              
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/20">
-                  <Home className="h-5 w-5 text-accent-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('unit')}</p>
-                  <p className="font-medium">
-                    {booking.unit?.type && getUnitTypeEmoji(booking.unit.type)} {booking.unit?.name || 'Unknown'}
-                  </p>
-                </div>
+              <div className="flex-1">
+                <p className="text-sm text-muted-foreground">{t('phoneNumber')}</p>
+                <p className="font-medium">{booking.phone_number || '—'}</p>
               </div>
-
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10">
-                  <Calendar className="h-5 w-5 text-success" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Dates</p>
-                  <p className="font-medium">{formatDateRange(booking.start_date, booking.end_date)}</p>
-                  <p className="text-sm text-muted-foreground">{booking.duration_days} days</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Financial Details - CORRECTED CALCULATION */}
-            <div className="space-y-3">
-              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-                Financials
-              </h3>
-              
-              <div className="rounded-lg border p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">{t('dailyRate')}</span>
-                  <span className="font-medium">{formatEGP(booking.daily_rate)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Base Amount</span>
-                  <span className="font-medium">{formatEGP(baseAmount)}</span>
-                </div>
-                {housekeepingAmount > 0 && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">{t('housekeeping')}</span>
-                    <span className="font-medium">{formatEGP(housekeepingAmount)}</span>
-                  </div>
-                )}
-                
-                {/* Total Rent (without deposit) */}
-                <div className="border-t pt-3 flex justify-between items-center">
-                  <span className="font-semibold">{t('totalAmount')}</span>
-                  <span className="font-bold text-lg text-primary">{formatEGP(totalRent)}</span>
-                </div>
-
-                {/* Refundable Deposit - Separate */}
-                {booking.deposit_amount > 0 && (
-                  <div className="flex justify-between items-center pt-2 border-t border-dashed">
-                    <span className="text-muted-foreground text-sm">
-                      {t('deposit')} <span className="text-xs">(Refundable)</span>
-                    </span>
-                    <span className="font-medium text-muted-foreground">{formatEGP(booking.deposit_amount)}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-2">
-                <Badge
-                  variant="outline"
-                  className={cn('font-medium', 
-                    booking.status === 'Confirmed' ? 'bg-success/10 text-success' : 
-                    booking.status === 'Cancelled' ? 'bg-muted text-muted-foreground' : 
-                    'bg-warning/10 text-warning-foreground'
-                  )}
+              {booking.phone_number && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-green-500 hover:text-green-600 hover:bg-green-50"
+                  onClick={() => openWhatsApp(booking.phone_number!, booking.tenant_name)}
                 >
-                  {booking.status}
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className={cn('font-medium', getPaymentStatusStyles(booking.payment_status))}
-                >
-                  {booking.payment_status}
-                </Badge>
-              </div>
-            </div>
-
-            {/* Notes */}
-            {booking.notes && (
-              <div className="space-y-2">
-                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-                  {t('notes')}
-                </h3>
-                <p className="text-sm p-3 rounded-lg bg-secondary/30">{booking.notes}</p>
-              </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex gap-3 pt-4 border-t">
-              <Button
-                onClick={() => setPdfModalOpen(true)}
-                className="flex-1 gradient-ocean gap-2"
-              >
-                <FileText className="h-4 w-4" />
-                {t('printReceipt')}
-              </Button>
+                  <MessageCircle className="h-5 w-5" />
+                </Button>
+              )}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* PDF Language Selection Modal */}
-      <PdfLanguageModal
-        open={pdfModalOpen}
-        onOpenChange={setPdfModalOpen}
-        onConfirm={handlePrintReceipt}
-        title={t('printReceipt')}
-      />
-    </>
+          {/* Property Details */}
+          <div className="space-y-3">
+            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+              {t('propertyDetails')}
+            </h3>
+            
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/20">
+                <Home className="h-5 w-5 text-accent-foreground" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">{t('unit')}</p>
+                <p className="font-medium">
+                  {booking.unit?.type && getUnitTypeEmoji(booking.unit.type)} {booking.unit?.name || 'Unknown'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10">
+                <Calendar className="h-5 w-5 text-success" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Dates</p>
+                <p className="font-medium">{formatDateRange(booking.start_date, booking.end_date)}</p>
+                <p className="text-sm text-muted-foreground">{booking.duration_days} days</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Financial Details - CORRECTED CALCULATION */}
+          <div className="space-y-3">
+            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+              Financials
+            </h3>
+            
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">{t('dailyRate')}</span>
+                <span className="font-medium">{formatEGP(booking.daily_rate)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Base Amount</span>
+                <span className="font-medium">{formatEGP(baseAmount)}</span>
+              </div>
+              {housekeepingAmount > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">{t('housekeeping')}</span>
+                  <span className="font-medium">{formatEGP(housekeepingAmount)}</span>
+                </div>
+              )}
+              
+              {/* Total Rent (without deposit) */}
+              <div className="border-t pt-3 flex justify-between items-center">
+                <span className="font-semibold">{t('totalAmount')}</span>
+                <span className="font-bold text-lg text-primary">{formatEGP(totalRent)}</span>
+              </div>
+
+              {/* Refundable Deposit - Separate */}
+              {booking.deposit_amount > 0 && (
+                <div className="flex justify-between items-center pt-2 border-t border-dashed">
+                  <span className="text-muted-foreground text-sm">
+                    {t('deposit')} <span className="text-xs">(Refundable)</span>
+                  </span>
+                  <span className="font-medium text-muted-foreground">{formatEGP(booking.deposit_amount)}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Badge
+                variant="outline"
+                className={cn('font-medium', 
+                  booking.status === 'Confirmed' ? 'bg-success/10 text-success' : 
+                  booking.status === 'Cancelled' ? 'bg-muted text-muted-foreground' : 
+                  'bg-warning/10 text-warning-foreground'
+                )}
+              >
+                {booking.status}
+              </Badge>
+              <Badge
+                variant="outline"
+                className={cn('font-medium', getPaymentStatusStyles(booking.payment_status))}
+              >
+                {booking.payment_status}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Notes */}
+          {booking.notes && (
+            <div className="space-y-2">
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+                {t('notes')}
+              </h3>
+              <p className="text-sm p-3 rounded-lg bg-secondary/30">{booking.notes}</p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };

@@ -36,14 +36,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Plus, CalendarIcon, Loader2, Trash2, Receipt, DollarSign, FileText, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, CalendarIcon, Loader2, Trash2, Receipt, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { formatEGP, formatEGPCompact } from '@/lib/currency';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getUnitTypeEmoji } from '@/types/database';
-import { generateUnitPerformancePDF, UnitPerformanceData } from '@/lib/pdf-generator';
-import { PdfLanguageModal } from '@/components/pdf/PdfLanguageModal';
 
 const expenseCategories = [
   'Maintenance',
@@ -57,11 +55,18 @@ const expenseCategories = [
   'Other',
 ];
 
+interface UnitPerformanceData {
+  unitName: string;
+  unitType: string;
+  totalRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
+}
+
 const ExpensesPage = () => {
   const { t } = useLanguage();
   const [unitFilter, setUnitFilter] = useState<string>('all');
   const [formOpen, setFormOpen] = useState(false);
-  const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('expenses');
   
   // Form state
@@ -154,19 +159,6 @@ const ExpensesPage = () => {
     if (confirm('Are you sure you want to delete this expense?')) {
       await deleteExpense.mutateAsync(id);
     }
-  };
-
-  const handleExportUnitPerformance = () => {
-    setPdfModalOpen(true);
-  };
-
-  const handlePdfGenerate = async (selectedLanguage: 'en' | 'ar') => {
-    const dateRange = 'All Time';
-    const housekeepingTotal = bookings
-      .filter(b => b.status !== 'Cancelled')
-      .reduce((sum, b) => sum + (b.housekeeping_amount || 0), 0);
-    
-    await generateUnitPerformancePDF(unitPerformanceData, dateRange, housekeepingTotal, selectedLanguage);
   };
 
   return (
@@ -263,7 +255,7 @@ const ExpensesPage = () => {
               Expenses
             </TabsTrigger>
             <TabsTrigger value="performance" className="gap-2">
-              <FileText className="h-4 w-4" />
+              <TrendingUp className="h-4 w-4" />
               Unit Performance
             </TabsTrigger>
           </TabsList>
@@ -349,10 +341,6 @@ const ExpensesPage = () => {
               <p className="text-muted-foreground">
                 View financial performance by unit. Revenue = Base Rent only (excludes housekeeping).
               </p>
-              <Button onClick={handleExportUnitPerformance} variant="outline" className="gap-2">
-                <FileText className="h-4 w-4" />
-                Export Profit Report
-              </Button>
             </div>
 
             {isLoading ? (
@@ -379,7 +367,7 @@ const ExpensesPage = () => {
                     {unitPerformanceData.map((unit) => (
                       <TableRow key={unit.unitName}>
                         <TableCell className="font-medium">
-                          {getUnitTypeEmoji(unit.unitType)} {unit.unitName}
+                          {getUnitTypeEmoji(unit.unitType as any)} {unit.unitName}
                         </TableCell>
                         <TableCell>{unit.unitType}</TableCell>
                         <TableCell className="text-right text-success font-semibold">
@@ -439,13 +427,13 @@ const ExpensesPage = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>{t('unit')} (Optional)</Label>
-                  <Select value={unitId || 'general'} onValueChange={(val) => setUnitId(val === 'general' ? '' : val)}>
+                  <Label>{t('unit')}</Label>
+                  <Select value={unitId} onValueChange={setUnitId}>
                     <SelectTrigger>
                       <SelectValue placeholder="General" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="general">General</SelectItem>
+                      <SelectItem value="">General</SelectItem>
                       {units.map((unit) => (
                         <SelectItem key={unit.id} value={unit.id}>
                           {getUnitTypeEmoji(unit.type)} {unit.name}
@@ -496,8 +484,8 @@ const ExpensesPage = () => {
                           !expenseDate && 'text-muted-foreground'
                         )}
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {expenseDate ? format(expenseDate, 'PPP') : 'Pick date'}
+                        <CalendarIcon className="ltr:mr-2 rtl:ml-2 h-4 w-4" />
+                        {expenseDate ? format(expenseDate, 'PPP') : 'Pick a date'}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -523,24 +511,28 @@ const ExpensesPage = () => {
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setFormOpen(false)}
+                >
                   {t('cancel')}
                 </Button>
-                <Button type="submit" disabled={loading} className="gradient-ocean">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('save')}
+                <Button
+                  type="submit"
+                  disabled={loading || !description.trim()}
+                  className="gradient-ocean"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    t('save')
+                  )}
                 </Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
-
-        {/* PDF Language Modal */}
-        <PdfLanguageModal
-          open={pdfModalOpen}
-          onOpenChange={setPdfModalOpen}
-          onConfirm={handlePdfGenerate}
-          title="Export Unit Performance Report"
-        />
       </div>
     </AppLayout>
   );
