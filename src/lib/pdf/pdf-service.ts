@@ -1,4 +1,4 @@
-import type { Booking } from '@/types/database';
+import type { Booking, Expense } from '@/types/database';
 import type { PdfLanguage } from './translations';
 
 import type { UnitPerformanceData } from './types';
@@ -7,6 +7,7 @@ import { renderElementToPdf } from './dom/pdf-utils';
 import { buildBookingReceiptElement } from './dom/receipt-template';
 import { buildFinancialReportElement } from './dom/report-template';
 import { buildBookingsReportElement, BookingsReportOptions } from './dom/bookings-report-template';
+import { buildExpensesReportElement, ExpensesReportOptions } from './dom/expenses-report-template';
 
 /**
  * Generate Booking Receipt PDF
@@ -82,6 +83,31 @@ export const generateBookingsReport = async (
     console.log('[PDF][DOM] Bookings report generated successfully');
   } catch (error) {
     console.error('[PDF][DOM] Failed to generate bookings report (EXACT ERROR):', error);
+    throw error;
+  }
+};
+
+/**
+ * Generate Expenses Report PDF
+ */
+export const generateExpensesReport = async (
+  options: ExpensesReportOptions
+): Promise<void> => {
+  try {
+    console.log('[PDF][DOM] Generating expenses report...', { 
+      expenseCount: options.expenses.length, 
+      language: options.language 
+    });
+
+    const el = buildExpensesReportElement(options);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `Expenses_Report_${dateStr}.pdf`;
+
+    await renderElementToPdf({ element: el, filename, language: options.language });
+
+    console.log('[PDF][DOM] Expenses report generated successfully');
+  } catch (error) {
+    console.error('[PDF][DOM] Failed to generate expenses report (EXACT ERROR):', error);
     throw error;
   }
 };
