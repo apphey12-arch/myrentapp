@@ -8,16 +8,18 @@ import { fetchArabicFontBase64 } from '@/lib/pdf-amiri-base64';
  */
 export const applyArabicFont = async (pdf: jsPDF): Promise<void> => {
   try {
-    const base64 = await fetchArabicFontBase64();
+    // NOTE: despite the name, this returns a *binary string* of the TTF file
+    // (to keep public API stable while avoiding build-breaking embedded strings).
+    const fontBinary = await fetchArabicFontBase64();
     
-    if (!base64 || base64.length < 1000) {
-      console.warn('Cairo font base64 is empty or too small, falling back to helvetica');
+    if (!fontBinary || fontBinary.length < 1000) {
+      console.warn('Cairo font data is empty or too small, falling back to helvetica');
       pdf.setFont('helvetica', 'normal');
       return;
     }
 
     // Register Cairo font in jsPDF virtual file system
-    pdf.addFileToVFS('Cairo-Regular.ttf', base64);
+    pdf.addFileToVFS('Cairo-Regular.ttf', fontBinary);
     pdf.addFont('Cairo-Regular.ttf', 'Cairo', 'normal');
     pdf.setFont('Cairo', 'normal');
 

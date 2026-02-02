@@ -45,6 +45,7 @@
     "@supabase/supabase-js": "^2.93.3",
     "@tanstack/react-query": "^5.83.0",
     "@types/react-big-calendar": "^1.16.3",
+    "arabic-persian-reshaper": "^1.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

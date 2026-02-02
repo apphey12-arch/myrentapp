@@ -1,37 +1,46 @@
-// Cairo Arabic font loader - fetches font at runtime to avoid large Base64 strings in code
-// This prevents build failures from oversized source files
+// Cairo Arabic font loader - fetches font at runtime.
+// IMPORTANT: We do NOT embed a giant Base64 string in the repo (it breaks builds).
+// Instead we fetch the TTF and pass it to jsPDF as a *binary string* in-memory.
 
-const CAIRO_FONT_URL = 'https://fonts.gstatic.com/s/cairo/v28/SLXgc1nY6HkvangtZmpcdU5f.ttf';
+// User-provided Google Fonts URL (TTF)
+const CAIRO_FONT_URL = 'https://fonts.gstatic.com/s/cairo/v20/SLXGc1nY6HkvangtZmpcMw.ttf';
 
-let cachedFontBase64: string | null = null;
+let cachedFontBinary: string | null = null;
+
+const arrayBufferToBinaryString = (buffer: ArrayBuffer): string => {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000; // avoid call stack limits
+  let out = '';
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    out += String.fromCharCode(...(bytes.subarray(i, i + chunkSize) as any));
+  }
+
+  return out;
+};
 
 /**
- * Fetches the Cairo font from Google Fonts CDN and converts to Base64
- * Caches result to avoid repeat fetches
+ * Fetches the Cairo TTF from Google Fonts and returns a binary string
+ * (jsPDF expects font file content as a binary string in addFileToVFS).
+ * Caches result to avoid repeat fetches.
  */
 export const fetchArabicFontBase64 = async (): Promise<string> => {
-  if (cachedFontBase64) {
-    return cachedFontBase64;
+  if (cachedFontBinary) {
+    return cachedFontBinary;
   }
 
   try {
-    const response = await fetch(CAIRO_FONT_URL);
+    const response = await fetch(CAIRO_FONT_URL, { mode: 'cors' });
     if (!response.ok) {
       throw new Error(`Failed to fetch Cairo font: ${response.status}`);
     }
     
     const arrayBuffer = await response.arrayBuffer();
-    
-    // Convert ArrayBuffer to Base64
-    const uint8Array = new Uint8Array(arrayBuffer);
-    let binaryString = '';
-    for (let i = 0; i < uint8Array.length; i++) {
-      binaryString += String.fromCharCode(uint8Array[i]);
-    }
-    const base64 = btoa(binaryString);
-    
-    cachedFontBase64 = base64;
-    return base64;
+
+    const binary = arrayBufferToBinaryString(arrayBuffer);
+    cachedFontBinary = binary;
+    return binary;
   } catch (error) {
     console.error('Failed to load Cairo font:', error);
     throw error;
