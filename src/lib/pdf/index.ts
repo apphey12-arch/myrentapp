@@ -18,3 +18,5 @@ export {
   fetchCairoFontBase64,
   isFontCached,
 } from './font-loader';
+
+export { shapeText, containsArabic } from './arabic';
