@@ -48,7 +48,8 @@ const UnitsPage = () => {
       // Calculate revenue from bookings for this unit (excluding cancelled)
       const unitRevenue = bookings
         .filter(b => b.unit_id === unit.id && b.status !== 'Cancelled')
-        .reduce((sum, b) => sum + Number(b.total_amount), 0);
+        // Revenue = Base Rent only (Daily Rate * Days). Housekeeping is pass-through.
+        .reduce((sum, b) => sum + (Number(b.daily_rate) * Number(b.duration_days)), 0);
       
       // Calculate expenses for this unit
       const unitExpenses = expenses

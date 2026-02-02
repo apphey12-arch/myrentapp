@@ -42,7 +42,11 @@ const DashboardPage = () => {
 
   // Stats calculations
   const activeBookings = bookings.filter(b => b.status !== 'Cancelled');
-  const totalRevenue = activeBookings.reduce((sum, b) => sum + Number(b.total_amount), 0);
+  // Revenue = Base Rent only (Daily Rate * Days). Housekeeping is pass-through.
+  const totalRevenue = activeBookings.reduce(
+    (sum, b) => sum + (Number(b.daily_rate) * Number(b.duration_days)),
+    0
+  );
   const confirmedCount = bookings.filter(b => b.status === 'Confirmed').length;
   const avgDailyRate = activeBookings.length > 0
     ? activeBookings.reduce((sum, b) => sum + Number(b.daily_rate), 0) / activeBookings.length
@@ -65,7 +69,7 @@ const DashboardPage = () => {
           const startDate = new Date(b.start_date);
           return startDate >= monthStart && startDate <= monthEnd;
         })
-        .reduce((sum, b) => sum + Number(b.total_amount), 0);
+        .reduce((sum, b) => sum + (Number(b.daily_rate) * Number(b.duration_days)), 0);
 
       const monthExpenses = expenses
         .filter(e => {
