@@ -31,7 +31,11 @@ export const BookingReceiptPdf: React.FC<BookingReceiptPdfProps> = ({ booking, l
   const depositRowStyle = isRtl ? pdfStyles.depositRowRtl : pdfStyles.depositRow;
 
   return (
-    <Document>
+    <Document
+      title={`${t.bookingReceipt} - ${booking.tenant_name}`}
+      author="Sunlight Village"
+      language={language}
+    >
       <Page size="A4" style={pdfStyles.page}>
         {/* Header */}
         <View style={pdfStyles.header}>
