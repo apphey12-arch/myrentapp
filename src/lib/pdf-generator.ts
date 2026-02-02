@@ -3,7 +3,109 @@ import autoTable from 'jspdf-autotable';
 import { formatEGP } from './currency';
 import { BookingStatus, UnitType, PaymentStatus, getUnitTypeEmoji } from '@/types/database';
 import { Language } from '@/contexts/LanguageContext';
-import { setupPdfLanguage } from '@/lib/pdf/amiri-font-loader';
+import { shapeArabic } from '@/lib/pdf/arabic-text';
+
+// ============================================================================
+// Cairo Font (FORCED for ALL PDFs)
+// ============================================================================
+
+/**
+ * We MUST NOT rely on jsPDF built-in fonts (helvetica/times/courier) because
+ * Arabic glyph support will break and show garbage characters.
+ *
+ * This loader fetches Cairo at runtime and registers it in the jsPDF VFS.
+ */
+const CAIRO_TTF_URL_PRIMARY =
+  // Preferred: fontsource via jsDelivr (TTF)
+  'https://cdn.jsdelivr.net/npm/@fontsource/cairo/files/cairo-arabic-400-normal.ttf';
+
+const CAIRO_TTF_URL_FALLBACK =
+  // Fallback (still Cairo): Google Fonts (TTF)
+  'https://fonts.gstatic.com/s/cairo/v20/SLXGc1nY6HkvangtZmpcMw.ttf';
+
+let cachedCairoTtfBase64: string | null = null;
+
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    binary += String.fromCharCode(...(bytes.subarray(i, i + chunkSize) as any));
+  }
+
+  return btoa(binary);
+};
+
+const isCairoRegistered = (pdf: jsPDF): boolean => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const list = (pdf as any).getFontList?.() as Record<string, unknown> | undefined;
+  return Boolean(list && typeof list === 'object' && 'Cairo' in list);
+};
+
+const fetchCairoAsBase64 = async (): Promise<string> => {
+  if (cachedCairoTtfBase64) return cachedCairoTtfBase64;
+
+  const tryFetch = async (url: string) => {
+    const res = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+    if (!res.ok) throw new Error(`Cairo font fetch failed: ${res.status} ${res.statusText}`);
+    const buffer = await res.arrayBuffer();
+    return arrayBufferToBase64(buffer);
+  };
+
+  try {
+    cachedCairoTtfBase64 = await tryFetch(CAIRO_TTF_URL_PRIMARY);
+    return cachedCairoTtfBase64;
+  } catch (e) {
+    console.warn('[PDF] Cairo primary URL failed, trying fallback...', e);
+    cachedCairoTtfBase64 = await tryFetch(CAIRO_TTF_URL_FALLBACK);
+    return cachedCairoTtfBase64;
+  }
+};
+
+const ensureCairoFont = async (pdf: jsPDF): Promise<void> => {
+  if (isCairoRegistered(pdf)) {
+    pdf.setFont('Cairo', 'normal');
+    return;
+  }
+
+  const base64 = await fetchCairoAsBase64();
+  if (!base64 || base64.length < 1000) {
+    throw new Error('Cairo font data is empty/invalid');
+  }
+
+  pdf.addFileToVFS('Cairo-Regular.ttf', base64);
+  pdf.addFont('Cairo-Regular.ttf', 'Cairo', 'normal');
+  pdf.setFont('Cairo', 'normal');
+};
+
+const setRtl = (pdf: jsPDF, isRtl: boolean) => {
+  // jsPDF uses setR2L in some builds; user requested setRTL.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (pdf as any).setR2L?.(isRtl);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (pdf as any).setRTL?.(isRtl);
+};
+
+const setupPdf = async (
+  pdf: jsPDF,
+  language: Language
+): Promise<{ isArabic: boolean; t: (s: string) => string }> => {
+  // 1) Force Cairo (global font)
+  await ensureCairoFont(pdf);
+
+  // 2) Mandatory per request
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (pdf as any).setLanguage?.('ar');
+
+  // 3) Direction & shaping
+  const isArabic = language === 'ar';
+  setRtl(pdf, isArabic);
+
+  const t = (s: string) => (isArabic ? shapeArabic(s) : s);
+  return { isArabic, t };
+};
 
 // ============================================================================
 // PDF Text Labels (Bilingual)
@@ -12,7 +114,7 @@ import { setupPdfLanguage } from '@/lib/pdf/amiri-font-loader';
 const pdfLabels = {
   en: {
     title: 'Sunlight Village',
-    subtitle: 'Official Booking Receipt',
+    subtitle: 'Booking Receipt',
     date: 'Date',
     tenantInfo: 'Tenant Information',
     name: 'Name',
@@ -57,7 +159,7 @@ const pdfLabels = {
   },
   ar: {
     title: 'صن لايت فيليج',
-    subtitle: 'إيصال الحجز الرسمي',
+    subtitle: 'إيصال الحجز',
     date: 'التاريخ',
     tenantInfo: 'معلومات المستأجر',
     name: 'الاسم',
@@ -146,12 +248,8 @@ const drawBrandHeader = (
   
   // Title
   pdf.setTextColor(...COLORS.brandText);
-  pdf.setFontSize(22);
-  pdf.text(title, pageWidth / 2, 15, { align: 'center' });
-  
-  // Subtitle
-  pdf.setFontSize(12);
-  pdf.text(subtitle, pageWidth / 2, 26, { align: 'center' });
+  pdf.setFontSize(18);
+  pdf.text(`${title} - ${subtitle}`, pageWidth / 2, 20, { align: 'center' });
   
   // Decorative line
   pdf.setDrawColor(...COLORS.border);
@@ -206,13 +304,13 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   const labels = pdfLabels[language];
   const pdf = new jsPDF('p', 'mm', 'a4');
   
-  // Setup font (Amiri for both languages) and get text shaping helper
-  const { isArabic, t } = await setupPdfLanguage(pdf, language);
+  // Setup Cairo (FORCED) and get text shaping helper
+  const { isArabic, t } = await setupPdf(pdf, language);
   
   // Calculate financials
-  const baseRent = data.dailyRate * data.durationDays;
+  const totalRent = data.dailyRate * data.durationDays; // Total Rent = base only
   const housekeeping = data.housekeepingAmount || 0;
-  const grandTotal = baseRent + housekeeping;
+  const grandTotal = totalRent + housekeeping;
   const deposit = data.depositAmount || 0;
   
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -250,7 +348,7 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
       [labels.payment, data.paymentStatus || 'Pending'],
     ]) as string[][],
     theme: 'grid',
-    styles: { font: 'Amiri', fontSize: 11, cellPadding: 5, halign: align },
+    styles: { font: 'Cairo', fontSize: 11, cellPadding: 5, halign: align },
     headStyles: { fillColor: COLORS.brand, textColor: COLORS.brandText, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: COLORS.zebra },
     columnStyles: kvColumnStyles as Record<number, object>,
@@ -273,7 +371,7 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
       [labels.duration, `${data.durationDays} ${labels.days}`],
     ]) as string[][],
     theme: 'grid',
-    styles: { font: 'Amiri', fontSize: 11, cellPadding: 5, halign: align },
+    styles: { font: 'Cairo', fontSize: 11, cellPadding: 5, halign: align },
     headStyles: { fillColor: COLORS.brand, textColor: COLORS.brandText, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: COLORS.zebra },
     columnStyles: kvColumnStyles as Record<number, object>,
@@ -285,16 +383,14 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   // ─────────────────────────────────────────────────────────────────────────
   // Pricing Table
   // ─────────────────────────────────────────────────────────────────────────
-  const pricingRows: [string, string][] = [
-    [t(labels.baseAmount), formatEGP(baseRent)],
-  ];
+  const pricingRows: [string, string][] = [];
+  pricingRows.push([t(labels.dailyRate), formatEGP(data.dailyRate)]);
+  pricingRows.push([t(labels.duration), `${data.durationDays} ${t(labels.days)}`]);
+  pricingRows.push([t(labels.totalRent), formatEGP(totalRent)]);
   if (housekeeping > 0) {
     pricingRows.push([t(labels.housekeeping), formatEGP(housekeeping)]);
   }
   pricingRows.push([t(labels.grandTotal), formatEGP(grandTotal)]);
-  if (deposit > 0) {
-    pricingRows.push([`${t(labels.refundableDeposit)} *`, formatEGP(deposit)]);
-  }
   
   const shapedPricing = t(labels.pricing);
   const shapedDescription = t(labels.description);
@@ -315,7 +411,7 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
     head: pricingHead as any,
     body: pricingBody as string[][],
     theme: 'grid',
-    styles: { font: 'Amiri', fontSize: 11, cellPadding: 6, halign: align },
+    styles: { font: 'Cairo', fontSize: 11, cellPadding: 6, halign: align },
     headStyles: { fillColor: COLORS.brand, textColor: COLORS.brandText, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: COLORS.zebra },
     columnStyles: isArabic
@@ -343,11 +439,15 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   
   yPos = (pdf as any).lastAutoTable.finalY + 8;
   
-  // Deposit footnote
+  // Deposit note (Refundable) - MUST NOT be included in Grand Total
   if (deposit > 0) {
-    pdf.setFontSize(9);
+    pdf.setFontSize(10);
     pdf.setTextColor(...COLORS.muted);
-    pdf.text(t(labels.depositNote), isArabic ? pageWidth - LAYOUT.marginX : LAYOUT.marginX, yPos, { align });
+    const depositLine = isArabic
+      ? `${t(labels.refundableDeposit)}: ${formatEGP(deposit)}`
+      : `${labels.refundableDeposit}: ${formatEGP(deposit)} (Refundable)`;
+
+    pdf.text(depositLine, isArabic ? pageWidth - LAYOUT.marginX : LAYOUT.marginX, yPos, { align });
   }
   
   // Footer on all pages
@@ -390,7 +490,7 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
   const labels = pdfLabels[language];
   const pdf = new jsPDF('p', 'mm', 'a4');
   
-  const { isArabic, t } = await setupPdfLanguage(pdf, language);
+  const { isArabic, t } = await setupPdf(pdf, language);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
   const totalPagesPlaceholder = '{total_pages_count_string}';
@@ -426,7 +526,7 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
     startY: yPos,
     body: (isArabic ? statsRows.map(([k, v]) => [v, k]) : statsRows) as string[][],
     theme: 'grid',
-    styles: { font: 'Amiri', fontSize: 12, cellPadding: 6, halign: align },
+    styles: { font: 'Cairo', fontSize: 12, cellPadding: 6, halign: align },
     columnStyles: isArabic
       ? { 0: { fontStyle: 'bold', halign: 'right' }, 1: { textColor: COLORS.muted, halign: 'right' } }
       : { 0: { fontStyle: 'bold', textColor: COLORS.muted }, 1: { halign: 'right' } },
@@ -454,7 +554,7 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
       return isArabic ? row.reverse() : row;
     }),
     theme: 'grid',
-    styles: { font: 'Amiri', fontSize: 9, cellPadding: 4, halign: align },
+    styles: { font: 'Cairo', fontSize: 9, cellPadding: 4, halign: align },
     headStyles: { fillColor: COLORS.brand, textColor: COLORS.brandText, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: COLORS.zebra },
     margin: { left: LAYOUT.marginX, right: LAYOUT.marginX, top: LAYOUT.marginTop, bottom: LAYOUT.marginBottom },
@@ -495,7 +595,7 @@ export const generateUnitPerformancePDF = async (
   const labels = pdfLabels[language];
   const pdf = new jsPDF('p', 'mm', 'a4');
   
-  const { isArabic, t } = await setupPdfLanguage(pdf, language);
+  const { isArabic, t } = await setupPdf(pdf, language);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
   const totalPagesPlaceholder = '{total_pages_count_string}';
@@ -531,7 +631,7 @@ export const generateUnitPerformancePDF = async (
     startY: yPos,
     body: (isArabic ? summaryRows.map(([k, v]) => [v, k]) : summaryRows) as string[][],
     theme: 'grid',
-    styles: { font: 'Amiri', fontSize: 12, cellPadding: 6, halign: align },
+    styles: { font: 'Cairo', fontSize: 12, cellPadding: 6, halign: align },
     columnStyles: isArabic
       ? { 0: { fontStyle: 'bold', halign: 'right' }, 1: { textColor: COLORS.muted, halign: 'right' } }
       : { 0: { fontStyle: 'bold', textColor: COLORS.muted }, 1: { halign: 'right' } },
@@ -569,7 +669,7 @@ export const generateUnitPerformancePDF = async (
       return isArabic ? row.reverse() : row;
     }),
     theme: 'grid',
-    styles: { font: 'Amiri', fontSize: 10, cellPadding: 5, halign: align },
+    styles: { font: 'Cairo', fontSize: 10, cellPadding: 5, halign: align },
     headStyles: { fillColor: COLORS.brand, textColor: COLORS.brandText, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: COLORS.zebra },
     margin: { left: LAYOUT.marginX, right: LAYOUT.marginX, top: LAYOUT.marginTop, bottom: LAYOUT.marginBottom },
