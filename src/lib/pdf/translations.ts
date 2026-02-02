@@ -1,10 +1,10 @@
 /**
- * PDF-specific translations for Arabic and English
+ * PDF Translations for Arabic and English
  */
 
-type Language = 'en' | 'ar';
+export type PdfLanguage = 'en' | 'ar';
 
-interface PdfTranslations {
+export interface PdfTranslations {
   // Header
   brandName: string;
   bookingReceipt: string;
@@ -31,7 +31,7 @@ interface PdfTranslations {
   // Financial
   financialBreakdown: string;
   dailyRate: string;
-  totalRent: string;
+  baseRent: string;
   housekeeping: string;
   grandTotal: string;
   securityDeposit: string;
@@ -47,20 +47,16 @@ interface PdfTranslations {
   // Status
   status: string;
   paymentStatus: string;
-  confirmed: string;
-  unconfirmed: string;
-  cancelled: string;
-  paid: string;
-  pending: string;
-  overdue: string;
   
   // Footer
   generatedOn: string;
   thankYou: string;
-  allRightsReserved: string;
+  paymentInstructions: string;
+  whatsApp: string;
+  instaPay: string;
 }
 
-const translations: Record<Language, PdfTranslations> = {
+const translations: Record<PdfLanguage, PdfTranslations> = {
   en: {
     brandName: 'Sunlight Village',
     bookingReceipt: 'Booking Receipt',
@@ -83,11 +79,11 @@ const translations: Record<Language, PdfTranslations> = {
     
     financialBreakdown: 'Financial Breakdown',
     dailyRate: 'Daily Rate',
-    totalRent: 'Total Rent',
+    baseRent: 'Base Rent',
     housekeeping: 'Housekeeping',
     grandTotal: 'Grand Total',
     securityDeposit: 'Security Deposit',
-    refundable: '(Refundable)',
+    refundable: '(Refundable - Not included in total)',
     
     unitName: 'Unit Name',
     totalRevenue: 'Total Revenue',
@@ -97,16 +93,12 @@ const translations: Record<Language, PdfTranslations> = {
     
     status: 'Status',
     paymentStatus: 'Payment Status',
-    confirmed: 'Confirmed',
-    unconfirmed: 'Unconfirmed',
-    cancelled: 'Cancelled',
-    paid: 'Paid',
-    pending: 'Pending',
-    overdue: 'Overdue',
     
     generatedOn: 'Generated on',
     thankYou: 'Thank you for choosing Sunlight Village!',
-    allRightsReserved: 'All rights reserved',
+    paymentInstructions: 'Payment Instructions',
+    whatsApp: 'WhatsApp',
+    instaPay: 'InstaPay',
   },
   ar: {
     brandName: 'صن لايت فيلدج',
@@ -130,11 +122,11 @@ const translations: Record<Language, PdfTranslations> = {
     
     financialBreakdown: 'التفاصيل المالية',
     dailyRate: 'السعر اليومي',
-    totalRent: 'إجمالي الإيجار',
+    baseRent: 'الإيجار الأساسي',
     housekeeping: 'التنظيف',
     grandTotal: 'المجموع الكلي',
     securityDeposit: 'مبلغ التأمين',
-    refundable: '(قابل للاسترداد)',
+    refundable: '(قابل للاسترداد - غير مضاف للمجموع)',
     
     unitName: 'اسم الوحدة',
     totalRevenue: 'إجمالي الإيرادات',
@@ -144,41 +136,27 @@ const translations: Record<Language, PdfTranslations> = {
     
     status: 'الحالة',
     paymentStatus: 'حالة الدفع',
-    confirmed: 'مؤكد',
-    unconfirmed: 'غير مؤكد',
-    cancelled: 'ملغي',
-    paid: 'مدفوع',
-    pending: 'قيد الانتظار',
-    overdue: 'متأخر',
     
     generatedOn: 'تم الإنشاء في',
     thankYou: 'شكراً لاختياركم صن لايت فيلدج!',
-    allRightsReserved: 'جميع الحقوق محفوظة',
+    paymentInstructions: 'تعليمات الدفع',
+    whatsApp: 'واتساب',
+    instaPay: 'انستاباي',
   },
 };
 
-/**
- * Get translations for a specific language
- */
-export const getPdfTranslations = (language: Language): PdfTranslations => {
+export const getTranslations = (language: PdfLanguage): PdfTranslations => {
   return translations[language];
 };
 
-/**
- * Format currency for PDF
- */
-export const formatPdfCurrency = (amount: number): string => {
+export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('en-EG', {
-    style: 'decimal',
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(amount) + ' EGP';
 };
 
-/**
- * Format date for PDF
- */
-export const formatPdfDate = (dateString: string, language: Language): string => {
+export const formatDate = (dateString: string, language: PdfLanguage): string => {
   const date = new Date(dateString);
   return date.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
     year: 'numeric',
