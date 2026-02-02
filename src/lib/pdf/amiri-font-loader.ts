@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { shapeArabic } from '@/lib/pdf/arabic-text';
 
 /**
  * Amiri Font Loader for jsPDF
@@ -6,10 +7,11 @@ import jsPDF from 'jspdf';
  * Amiri is a professional Arabic font that fully supports BOTH Arabic and Latin characters.
  * This allows mixed-language PDFs without garbage characters.
  * 
- * CDN Source: https://cdnjs.cloudflare.com/ajax/libs/amiri-font/0.117/Amiri-Regular.ttf
+ * Using Google Fonts CDN which is reliable and stable
  */
 
-const AMIRI_FONT_URL = 'https://cdnjs.cloudflare.com/ajax/libs/amiri-font/0.117/Amiri-Regular.ttf';
+// Google Fonts CDN - Amiri Regular (full Arabic + Latin support)
+const AMIRI_FONT_URL = 'https://fonts.gstatic.com/s/amiri/v27/J7aRnpd8CGxBHqUpvrIw74NL.ttf';
 
 let cachedAmiriFontBase64: string | null = null;
 
@@ -108,7 +110,7 @@ export const embedAmiriFont = async (pdf: jsPDF): Promise<void> => {
 export const setupPdfLanguage = async (
   pdf: jsPDF, 
   language: 'en' | 'ar'
-): Promise<{ isArabic: boolean }> => {
+): Promise<{ isArabic: boolean; t: (s: string) => string }> => {
   const isArabic = language === 'ar';
   
   // Always use Amiri font (works for both Arabic and English)
@@ -118,5 +120,8 @@ export const setupPdfLanguage = async (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (pdf as any).setR2L?.(isArabic);
   
-  return { isArabic };
+  // Text shaping helper - shapes Arabic text for proper glyph rendering
+  const t = (s: string): string => (isArabic ? shapeArabic(s) : s);
+  
+  return { isArabic, t };
 };
