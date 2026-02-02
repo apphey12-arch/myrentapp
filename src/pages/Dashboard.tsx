@@ -21,9 +21,10 @@ import { Booking, UnitType, getUnitTypeEmoji } from '@/types/database';
 import { formatEGP, formatEGPCompact } from '@/lib/currency';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { cn } from '@/lib/utils';
 
 const DashboardPage = () => {
-  const { t } = useLanguage();
+  const { t, isRTL } = useLanguage();
   const [unitFilter, setUnitFilter] = useState<string>('all');
   const [unitTypeFilter, setUnitTypeFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,7 +72,9 @@ const DashboardPage = () => {
           </div>
           <h1 className="font-display text-2xl font-bold mb-2">{t('noUnitsFound')}</h1>
           <p className="text-muted-foreground text-center mb-6 max-w-md">
-            You need to add at least one unit before creating bookings.
+            {isRTL 
+              ? 'تحتاج إلى إضافة وحدة واحدة على الأقل قبل إنشاء الحجوزات.'
+              : 'You need to add at least one unit before creating bookings.'}
           </p>
           <Link to="/units">
             <Button className="gradient-ocean gap-2">
@@ -161,12 +164,15 @@ const DashboardPage = () => {
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className={cn(
+              "absolute top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground",
+              isRTL ? "right-3" : "left-3"
+            )} />
             <Input
               placeholder={t('searchByNameOrPhone')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className={cn(isRTL ? "pr-10" : "pl-10")}
             />
           </div>
           

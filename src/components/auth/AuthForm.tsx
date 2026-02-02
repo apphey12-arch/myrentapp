@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 type AuthMode = 'login' | 'signup' | 'forgot-password';
 
 export const AuthForm = () => {
-  const { t } = useLanguage();
+  const { t, isRTL } = useLanguage();
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,8 +35,10 @@ export const AuthForm = () => {
         });
         if (error) throw error;
         toast({
-          title: 'Password Reset Email Sent',
-          description: 'Check your email for a link to reset your password.',
+          title: isRTL ? 'تم إرسال رابط إعادة التعيين' : 'Password Reset Email Sent',
+          description: isRTL 
+            ? 'تحقق من بريدك الإلكتروني لإعادة تعيين كلمة المرور'
+            : 'Check your email for a link to reset your password.',
         });
         setMode('login');
       } else if (mode === 'login') {
@@ -46,13 +48,15 @@ export const AuthForm = () => {
         const { error } = await signUp(email, password, fullName);
         if (error) throw error;
         toast({
-          title: 'Account created!',
-          description: 'Please check your email to verify your account.',
+          title: isRTL ? 'تم إنشاء الحساب!' : 'Account created!',
+          description: isRTL 
+            ? 'يرجى التحقق من بريدك الإلكتروني لتأكيد حسابك.'
+            : 'Please check your email to verify your account.',
         });
       }
     } catch (error: any) {
       toast({
-        title: 'Error',
+        title: isRTL ? 'خطأ' : 'Error',
         description: error.message,
         variant: 'destructive',
       });
@@ -70,8 +74,8 @@ export const AuthForm = () => {
       if (error) throw error;
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to sign in with Google',
+        title: isRTL ? 'خطأ' : 'Error',
+        description: error.message || (isRTL ? 'فشل تسجيل الدخول عبر جوجل' : 'Failed to sign in with Google'),
         variant: 'destructive',
       });
       setGoogleLoading(false);
@@ -89,8 +93,8 @@ export const AuthForm = () => {
       if (error) throw error;
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to sign in with Apple',
+        title: isRTL ? 'خطأ' : 'Error',
+        description: error.message || (isRTL ? 'فشل تسجيل الدخول عبر Apple' : 'Failed to sign in with Apple'),
         variant: 'destructive',
       });
       setAppleLoading(false);
@@ -101,15 +105,15 @@ export const AuthForm = () => {
     switch (mode) {
       case 'login': return t('welcomeBack');
       case 'signup': return t('createAccount');
-      case 'forgot-password': return 'Reset Password';
+      case 'forgot-password': return t('resetPassword');
     }
   };
 
   const getDescription = () => {
     switch (mode) {
-      case 'login': return 'Sign in to manage your properties';
-      case 'signup': return 'Create an account to get started';
-      case 'forgot-password': return 'Enter your email to receive a password reset link';
+      case 'login': return isRTL ? 'سجل الدخول لإدارة ممتلكاتك' : 'Sign in to manage your properties';
+      case 'signup': return isRTL ? 'أنشئ حسابًا للبدء' : 'Create an account to get started';
+      case 'forgot-password': return isRTL ? 'أدخل بريدك الإلكتروني لتلقي رابط إعادة التعيين' : 'Enter your email to receive a password reset link';
     }
   };
 
@@ -143,7 +147,7 @@ export const AuthForm = () => {
               className="flex items-center gap-1 text-sm text-primary hover:underline mb-4"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to login
+              {t('backToLogin')}
             </button>
           )}
 
@@ -198,14 +202,14 @@ export const AuthForm = () => {
                       <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
                     </svg>
                   )}
-                  Sign in with Apple
+                  {t('signInWithApple')}
                 </Button>
               </div>
 
               <div className="relative my-4">
                 <Separator />
                 <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-                  or
+                  {t('or')}
                 </span>
               </div>
             </>
@@ -220,7 +224,7 @@ export const AuthForm = () => {
                   <Input
                     id="fullName"
                     type="text"
-                    placeholder="Enter your name"
+                    placeholder={isRTL ? 'أدخل اسمك' : 'Enter your name'}
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="ps-10"
@@ -272,7 +276,7 @@ export const AuthForm = () => {
                   onClick={() => setMode('forgot-password')}
                   className="text-sm text-primary hover:underline"
                 >
-                  Forgot password?
+                  {t('forgotPassword')}
                 </button>
               </div>
             )}
@@ -289,7 +293,7 @@ export const AuthForm = () => {
               ) : mode === 'signup' ? (
                 t('signUp')
               ) : (
-                'Send Reset Link'
+                t('sendResetLink')
               )}
             </Button>
           </form>
@@ -301,9 +305,7 @@ export const AuthForm = () => {
                 onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
                 className="text-sm text-primary hover:underline"
               >
-                {mode === 'login'
-                  ? "Don't have an account? Sign up"
-                  : 'Already have an account? Sign in'}
+                {mode === 'login' ? t('noAccount') : t('hasAccount')}
               </button>
             </div>
           )}

@@ -30,7 +30,7 @@ import {
 import { formatEGP } from '@/lib/currency';
 
 const UnitsPage = () => {
-  const { t } = useLanguage();
+  const { t, isRTL } = useLanguage();
   const { units, isLoading, createUnit, updateUnit, deleteUnit } = useUnits();
   const { bookings } = useBookings();
   const { expenses } = useExpenses();
@@ -101,7 +101,7 @@ const UnitsPage = () => {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <h1 className="font-display text-3xl font-bold text-foreground">{t('myUnits')}</h1>
-            <p className="text-muted-foreground mt-1">Manage your properties</p>
+            <p className="text-muted-foreground mt-1">{t('manageProperties')}</p>
           </div>
           <Button onClick={() => setFormOpen(true)} className="gradient-ocean gap-2">
             <Plus className="h-4 w-4" />
@@ -121,7 +121,7 @@ const UnitsPage = () => {
             </div>
             <h2 className="text-xl font-semibold mb-2">{t('noUnitsFound')}</h2>
             <p className="text-muted-foreground mb-6">
-              Add your first property to get started with bookings
+              {isRTL ? 'أضف أول عقار لك للبدء في الحجوزات' : 'Add your first property to get started with bookings'}
             </p>
             <Button onClick={() => setFormOpen(true)} className="gradient-ocean gap-2">
               <Plus className="h-4 w-4" />
@@ -164,7 +164,7 @@ const UnitsPage = () => {
               <div className="space-y-4 mt-4">
                 <div className="p-4 rounded-lg bg-secondary/30">
                   <p className="text-sm text-muted-foreground">{t('unitType')}</p>
-                  <p className="font-medium">{detailUnit.type}</p>
+                  <p className="font-medium">{t(detailUnit.type.toLowerCase())}</p>
                 </div>
 
                 {/* Profitability Card */}
@@ -207,8 +207,9 @@ const UnitsPage = () => {
             <AlertDialogHeader>
               <AlertDialogTitle>{t('delete')} {t('unit')}?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently delete this unit and all associated bookings.
-                This action cannot be undone.
+                {isRTL 
+                  ? 'سيؤدي هذا إلى حذف هذه الوحدة وجميع الحجوزات المرتبطة بها نهائيًا. لا يمكن التراجع عن هذا الإجراء.'
+                  : 'This will permanently delete this unit and all associated bookings. This action cannot be undone.'}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

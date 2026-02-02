@@ -68,7 +68,7 @@ interface UnitPerformanceData {
 }
 
 const ExpensesPage = () => {
-  const { t } = useLanguage();
+  const { t, isRTL } = useLanguage();
   const [unitFilter, setUnitFilter] = useState<string>('all');
   const [formOpen, setFormOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('expenses');
@@ -85,7 +85,7 @@ const ExpensesPage = () => {
   const [unitId, setUnitId] = useState<string>('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState(0);
-  const [category, setCategory] = useState('General');
+  const [category, setCategory] = useState('Maintenance');
   const [expenseDate, setExpenseDate] = useState<Date>(new Date());
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -116,6 +116,12 @@ const ExpensesPage = () => {
       return isWithinInterval(expenseDate, { start: dateRange.from!, end: dateRange.to! });
     });
   }, [filteredExpenses, dateRange]);
+
+  // Translate category names
+  const getCategoryLabel = (cat: string) => {
+    const key = cat.toLowerCase();
+    return t(key) || cat;
+  };
 
   // Calculate unit performance data (Revenue = Base Rent ONLY, not housekeeping)
   const unitPerformanceData = useMemo((): UnitPerformanceData[] => {
@@ -153,7 +159,7 @@ const ExpensesPage = () => {
     setUnitId('');
     setDescription('');
     setAmount(0);
-    setCategory('General');
+    setCategory('Maintenance');
     setExpenseDate(new Date());
     setNotes('');
   };
@@ -180,7 +186,7 @@ const ExpensesPage = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this expense?')) {
+    if (confirm(isRTL ? 'هل أنت متأكد من حذف هذا المصروف؟' : 'Are you sure you want to delete this expense?')) {
       await deleteExpense.mutateAsync(id);
     }
   };
@@ -189,14 +195,14 @@ const ExpensesPage = () => {
     try {
       await generateFinancialReport(unitPerformanceData, performanceTotals, language);
       toast({
-        title: 'Report Downloaded',
-        description: 'Your financial report has been generated successfully.',
+        title: isRTL ? 'تم تحميل التقرير' : 'Report Downloaded',
+        description: isRTL ? 'تم إنشاء تقريرك المالي بنجاح.' : 'Your financial report has been generated successfully.',
       });
     } catch (error) {
       console.error('Failed to generate report:', error);
       toast({
-        title: 'Export Failed',
-        description: 'Failed to generate the PDF. Please try again.',
+        title: isRTL ? 'فشل التصدير' : 'Export Failed',
+        description: isRTL ? 'فشل إنشاء التقرير. حاول مرة أخرى.' : 'Failed to generate the PDF. Please try again.',
         variant: 'destructive',
       });
       throw error;
@@ -214,14 +220,14 @@ const ExpensesPage = () => {
         } : undefined,
       });
       toast({
-        title: 'Expenses Report Downloaded',
-        description: 'Your expenses report has been generated successfully.',
+        title: isRTL ? 'تم تحميل تقرير المصروفات' : 'Expenses Report Downloaded',
+        description: isRTL ? 'تم إنشاء تقرير المصروفات بنجاح.' : 'Your expenses report has been generated successfully.',
       });
     } catch (error) {
       console.error('Failed to generate expenses report:', error);
       toast({
-        title: 'Export Failed',
-        description: 'Failed to generate the expenses report. Please try again.',
+        title: isRTL ? 'فشل التصدير' : 'Export Failed',
+        description: isRTL ? 'فشل إنشاء تقرير المصروفات. حاول مرة أخرى.' : 'Failed to generate the expenses report. Please try again.',
         variant: 'destructive',
       });
       throw error;
@@ -235,7 +241,7 @@ const ExpensesPage = () => {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <h1 className="font-display text-3xl font-bold text-foreground">{t('expenses')}</h1>
-            <p className="text-muted-foreground mt-1">Track your property expenses & performance</p>
+            <p className="text-muted-foreground mt-1">{t('trackExpenses')}</p>
           </div>
           <Button onClick={() => setFormOpen(true)} className="gradient-ocean gap-2">
             <Plus className="h-4 w-4" />
@@ -266,7 +272,7 @@ const ExpensesPage = () => {
                   <Receipt className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Records</p>
+                  <p className="text-sm text-muted-foreground">{t('totalRecords')}</p>
                   <p className="text-xl font-bold text-foreground">{expenses.length}</p>
                 </div>
               </div>
@@ -301,7 +307,7 @@ const ExpensesPage = () => {
                   )}
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Net Profit</p>
+                  <p className="text-sm text-muted-foreground">{t('netProfit')}</p>
                   <p className={cn(
                     "text-xl font-bold",
                     performanceTotals.netProfit >= 0 ? "text-success" : "text-destructive"
@@ -319,11 +325,11 @@ const ExpensesPage = () => {
           <TabsList>
             <TabsTrigger value="expenses" className="gap-2">
               <Receipt className="h-4 w-4" />
-              Expenses
+              {t('expenses')}
             </TabsTrigger>
             <TabsTrigger value="performance" className="gap-2">
               <TrendingUp className="h-4 w-4" />
-              Unit Performance
+              {t('unitPerformance')}
             </TabsTrigger>
           </TabsList>
 
@@ -357,7 +363,7 @@ const ExpensesPage = () => {
                         !dateRange?.from && "text-muted-foreground"
                       )}
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      <CalendarIcon className="me-2 h-4 w-4" />
                       {dateRange?.from ? (
                         dateRange.to ? (
                           <>
@@ -368,7 +374,7 @@ const ExpensesPage = () => {
                           format(dateRange.from, "LLL dd, y")
                         )
                       ) : (
-                        <span>Pick date range</span>
+                        <span>{t('pickDateRange')}</span>
                       )}
                     </Button>
                   </PopoverTrigger>
@@ -394,7 +400,7 @@ const ExpensesPage = () => {
                 disabled={dateFilteredExpenses.length === 0}
               >
                 <FileText className="h-4 w-4" />
-                Download Expenses Report
+                {t('downloadExpensesReport')}
               </Button>
             </div>
 
@@ -405,7 +411,7 @@ const ExpensesPage = () => {
               </div>
             ) : filteredExpenses.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                <p>No expenses found. Add your first expense!</p>
+                <p>{t('noExpenses')}</p>
               </div>
             ) : (
               <Card className="shadow-soft">
@@ -416,7 +422,7 @@ const ExpensesPage = () => {
                       <TableHead>{t('unit')}</TableHead>
                       <TableHead>{t('category')}</TableHead>
                       <TableHead>{t('expenseDate')}</TableHead>
-                      <TableHead className="text-right">{t('amount')}</TableHead>
+                      <TableHead className={cn(isRTL ? "text-left" : "text-right")}>{t('amount')}</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -428,12 +434,12 @@ const ExpensesPage = () => {
                           {expense.unit ? (
                             <span>{getUnitTypeEmoji(expense.unit.type)} {expense.unit.name}</span>
                           ) : (
-                            <span className="text-muted-foreground">General</span>
+                            <span className="text-muted-foreground">{t('general')}</span>
                           )}
                         </TableCell>
-                        <TableCell>{expense.category}</TableCell>
+                        <TableCell>{getCategoryLabel(expense.category)}</TableCell>
                         <TableCell>{format(new Date(expense.expense_date), 'MMM d, yyyy')}</TableCell>
-                        <TableCell className="text-right font-semibold text-destructive">
+                        <TableCell className={cn("font-semibold text-destructive", isRTL ? "text-left" : "text-right")}>
                           {formatEGP(expense.amount)}
                         </TableCell>
                         <TableCell>
@@ -458,7 +464,7 @@ const ExpensesPage = () => {
           <TabsContent value="performance" className="space-y-6">
             <div className="flex justify-between items-center">
               <p className="text-muted-foreground">
-                View financial performance by unit. Revenue = Base Rent only (excludes housekeeping).
+                {t('revenueNote')}
               </p>
               <Button 
                 onClick={() => setPdfModalOpen(true)}
@@ -466,7 +472,7 @@ const ExpensesPage = () => {
                 className="gap-2"
               >
                 <Download className="h-4 w-4" />
-                Export Report
+                {t('downloadReport')}
               </Button>
             </div>
 
@@ -476,7 +482,7 @@ const ExpensesPage = () => {
               </div>
             ) : unitPerformanceData.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                <p>No units found. Add units first to see performance.</p>
+                <p>{isRTL ? 'لا توجد وحدات. أضف وحدات أولاً لعرض الأداء.' : 'No units found. Add units first to see performance.'}</p>
               </div>
             ) : (
               <Card className="shadow-soft">
@@ -484,10 +490,10 @@ const ExpensesPage = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t('unit')}</TableHead>
-                      <TableHead>{t('type')}</TableHead>
-                      <TableHead className="text-right">{t('totalRevenue')}</TableHead>
-                      <TableHead className="text-right">{t('totalExpenses')}</TableHead>
-                      <TableHead className="text-right">Net Profit</TableHead>
+                      <TableHead>{t('unitType')}</TableHead>
+                      <TableHead className={cn(isRTL ? "text-left" : "text-right")}>{t('totalRevenue')}</TableHead>
+                      <TableHead className={cn(isRTL ? "text-left" : "text-right")}>{t('totalExpenses')}</TableHead>
+                      <TableHead className={cn(isRTL ? "text-left" : "text-right")}>{t('netProfit')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -496,16 +502,17 @@ const ExpensesPage = () => {
                         <TableCell className="font-medium">
                           {getUnitTypeEmoji(unit.unitType as any)} {unit.unitName}
                         </TableCell>
-                        <TableCell>{unit.unitType}</TableCell>
-                        <TableCell className="text-right text-success font-semibold">
+                        <TableCell>{t(unit.unitType.toLowerCase())}</TableCell>
+                        <TableCell className={cn("text-success font-semibold", isRTL ? "text-left" : "text-right")}>
                           {formatEGP(unit.totalRevenue)}
                         </TableCell>
-                        <TableCell className="text-right text-destructive font-semibold">
+                        <TableCell className={cn("text-destructive font-semibold", isRTL ? "text-left" : "text-right")}>
                           {formatEGP(unit.totalExpenses)}
                         </TableCell>
                         <TableCell className={cn(
-                          "text-right font-bold",
-                          unit.netProfit >= 0 ? "text-success" : "text-destructive"
+                          "font-bold",
+                          unit.netProfit >= 0 ? "text-success" : "text-destructive",
+                          isRTL ? "text-left" : "text-right"
                         )}>
                           {unit.netProfit >= 0 ? '+' : ''}{formatEGP(unit.netProfit)}
                         </TableCell>
@@ -513,16 +520,16 @@ const ExpensesPage = () => {
                     ))}
                     {/* Totals Row */}
                     <TableRow className="bg-muted/50 font-bold">
-                      <TableCell colSpan={2}>Total</TableCell>
-                      <TableCell className="text-right text-success">
+                      <TableCell colSpan={2}>{t('total')}</TableCell>
+                      <TableCell className={cn("text-success", isRTL ? "text-left" : "text-right")}>
                         {formatEGP(performanceTotals.totalRevenue)}
                       </TableCell>
-                      <TableCell className="text-right text-destructive">
+                      <TableCell className={cn("text-destructive", isRTL ? "text-left" : "text-right")}>
                         {formatEGP(performanceTotals.totalExpenses)}
                       </TableCell>
                       <TableCell className={cn(
-                        "text-right",
-                        performanceTotals.netProfit >= 0 ? "text-success" : "text-destructive"
+                        performanceTotals.netProfit >= 0 ? "text-success" : "text-destructive",
+                        isRTL ? "text-left" : "text-right"
                       )}>
                         {performanceTotals.netProfit >= 0 ? '+' : ''}{formatEGP(performanceTotals.netProfit)}
                       </TableCell>
@@ -543,9 +550,9 @@ const ExpensesPage = () => {
 
             <form onSubmit={handleSubmit} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <Label>{t('description')}</Label>
+                <Label>{t('expenseName')}</Label>
                 <Input
-                  placeholder={t('description')}
+                  placeholder={isRTL ? 'مثال: صيانة، كهرباء، قسط' : 'e.g. Electricity, Maintenance, Installment'}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   required
@@ -554,13 +561,13 @@ const ExpensesPage = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>{t('unit')}</Label>
+                  <Label>{t('selectUnit')}</Label>
                   <Select value={unitId} onValueChange={setUnitId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="General" />
+                      <SelectValue placeholder={t('general')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">General</SelectItem>
+                      <SelectItem value="">{t('general')}</SelectItem>
                       {units.map((unit) => (
                         <SelectItem key={unit.id} value={unit.id}>
                           {getUnitTypeEmoji(unit.type)} {unit.name}
@@ -579,7 +586,7 @@ const ExpensesPage = () => {
                     <SelectContent>
                       {expenseCategories.map((cat) => (
                         <SelectItem key={cat} value={cat}>
-                          {cat}
+                          {getCategoryLabel(cat)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -611,8 +618,8 @@ const ExpensesPage = () => {
                           !expenseDate && 'text-muted-foreground'
                         )}
                       >
-                        <CalendarIcon className="ltr:mr-2 rtl:ml-2 h-4 w-4" />
-                        {expenseDate ? format(expenseDate, 'PPP') : 'Pick a date'}
+                        <CalendarIcon className="me-2 h-4 w-4" />
+                        {expenseDate ? format(expenseDate, 'PPP') : (isRTL ? 'اختر تاريخ' : 'Pick a date')}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -667,7 +674,7 @@ const ExpensesPage = () => {
           open={pdfModalOpen}
           onOpenChange={setPdfModalOpen}
           onConfirm={handleExportReport}
-          title="Export Financial Report"
+          title={isRTL ? 'تصدير التقرير المالي' : 'Export Financial Report'}
         />
 
         {/* PDF Language Selection Modal - Expenses Report */}
@@ -675,7 +682,7 @@ const ExpensesPage = () => {
           open={expensesPdfModalOpen}
           onOpenChange={setExpensesPdfModalOpen}
           onConfirm={handleExportExpensesReport}
-          title="Export Expenses Report"
+          title={isRTL ? 'تصدير تقرير المصروفات' : 'Export Expenses Report'}
         />
       </div>
     </AppLayout>

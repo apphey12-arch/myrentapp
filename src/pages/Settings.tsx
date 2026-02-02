@@ -9,11 +9,11 @@ import { useLanguage, Language } from '@/contexts/LanguageContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Globe, Moon, Sun, Palette, Shield, Loader2, Lock, Eye, EyeOff } from 'lucide-react';
+import { Globe, Moon, Sun, Palette, Shield, Loader2, Lock, Eye, EyeOff, Info } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const SettingsPage = () => {
-  const { language, setLanguage, t } = useLanguage();
+  const { language, setLanguage, t, isRTL } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
 
@@ -30,8 +30,8 @@ const SettingsPage = () => {
     
     if (newPassword !== confirmPassword) {
       toast({
-        title: 'Error',
-        description: 'New passwords do not match',
+        title: isRTL ? 'خطأ' : 'Error',
+        description: isRTL ? 'كلمات المرور غير متطابقة' : 'New passwords do not match',
         variant: 'destructive',
       });
       return;
@@ -39,8 +39,8 @@ const SettingsPage = () => {
 
     if (newPassword.length < 6) {
       toast({
-        title: 'Error',
-        description: 'Password must be at least 6 characters',
+        title: isRTL ? 'خطأ' : 'Error',
+        description: isRTL ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters',
         variant: 'destructive',
       });
       return;
@@ -55,8 +55,8 @@ const SettingsPage = () => {
       if (error) throw error;
 
       toast({
-        title: 'Success',
-        description: 'Password updated successfully',
+        title: isRTL ? 'تم بنجاح' : 'Success',
+        description: isRTL ? 'تم تحديث كلمة المرور بنجاح' : 'Password updated successfully',
       });
       
       // Clear form
@@ -65,8 +65,8 @@ const SettingsPage = () => {
       setConfirmPassword('');
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to update password',
+        title: isRTL ? 'خطأ' : 'Error',
+        description: error.message || (isRTL ? 'فشل في تحديث كلمة المرور' : 'Failed to update password'),
         variant: 'destructive',
       });
     } finally {
@@ -80,14 +80,16 @@ const SettingsPage = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="font-display text-3xl font-bold text-foreground">{t('settings')}</h1>
-          <p className="text-muted-foreground mt-1">Customize your experience</p>
+          <p className="text-muted-foreground mt-1">
+            {isRTL ? 'تخصيص تجربتك' : 'Customize your experience'}
+          </p>
         </div>
 
         <div className="max-w-2xl">
           <Tabs defaultValue="general" className="space-y-6">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="general">General</TabsTrigger>
-              <TabsTrigger value="security">Security</TabsTrigger>
+              <TabsTrigger value="general">{t('general')}</TabsTrigger>
+              <TabsTrigger value="security">{t('security')}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="space-y-6">
@@ -146,8 +148,8 @@ const SettingsPage = () => {
                         </Label>
                         <p className="text-sm text-muted-foreground">
                           {theme === 'dark' 
-                            ? 'Using dark theme for reduced eye strain'
-                            : 'Using light theme for better visibility'}
+                            ? (isRTL ? 'استخدام المظهر الداكن لراحة العين' : 'Using dark theme for reduced eye strain')
+                            : (isRTL ? 'استخدام المظهر الفاتح للرؤية الأفضل' : 'Using light theme for better visibility')}
                         </p>
                       </div>
                     </div>
@@ -163,12 +165,12 @@ const SettingsPage = () => {
               {/* App Info */}
               <Card className="shadow-soft">
                 <CardHeader>
-                  <CardTitle>About</CardTitle>
+                  <CardTitle>{t('about')}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm text-muted-foreground">
-                  <p><strong>Sunlight Village</strong> - Property Management System</p>
-                  <p>Version 1.0.0</p>
-                  <p>© 2024 All rights reserved</p>
+                  <p><strong>Sunlight Village</strong> - {isRTL ? 'نظام إدارة العقارات' : 'Property Management System'}</p>
+                  <p>{isRTL ? 'الإصدار' : 'Version'} 1.0.0</p>
+                  <p>© 2024 {isRTL ? 'جميع الحقوق محفوظة' : 'All rights reserved'}</p>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -179,16 +181,18 @@ const SettingsPage = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Shield className="h-5 w-5 text-primary" />
-                    Change Password
+                    {t('changePassword')}
                   </CardTitle>
                   <CardDescription>
-                    Update your password to keep your account secure
+                    {isRTL 
+                      ? 'قم بتحديث كلمة المرور للحفاظ على أمان حسابك'
+                      : 'Update your password to keep your account secure'}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleChangePassword} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="current-password">Current Password</Label>
+                      <Label htmlFor="current-password">{t('currentPassword')}</Label>
                       <div className="relative">
                         <Lock className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
@@ -197,7 +201,7 @@ const SettingsPage = () => {
                           value={currentPassword}
                           onChange={(e) => setCurrentPassword(e.target.value)}
                           className="ps-10 pe-10"
-                          placeholder="Enter current password"
+                          placeholder={isRTL ? 'أدخل كلمة المرور الحالية' : 'Enter current password'}
                         />
                         <button
                           type="button"
@@ -210,7 +214,7 @@ const SettingsPage = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="new-password">New Password</Label>
+                      <Label htmlFor="new-password">{t('newPassword')}</Label>
                       <div className="relative">
                         <Lock className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
@@ -219,7 +223,7 @@ const SettingsPage = () => {
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
                           className="ps-10 pe-10"
-                          placeholder="Enter new password"
+                          placeholder={isRTL ? 'أدخل كلمة المرور الجديدة' : 'Enter new password'}
                           minLength={6}
                         />
                         <button
@@ -233,7 +237,7 @@ const SettingsPage = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="confirm-password">Confirm New Password</Label>
+                      <Label htmlFor="confirm-password">{t('confirmPassword')}</Label>
                       <div className="relative">
                         <Lock className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
@@ -242,7 +246,7 @@ const SettingsPage = () => {
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           className="ps-10"
-                          placeholder="Confirm new password"
+                          placeholder={isRTL ? 'تأكيد كلمة المرور الجديدة' : 'Confirm new password'}
                           minLength={6}
                         />
                       </div>
@@ -256,10 +260,29 @@ const SettingsPage = () => {
                       {passwordLoading ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        'Update Password'
+                        t('updatePassword')
                       )}
                     </Button>
                   </form>
+                </CardContent>
+              </Card>
+
+              {/* Security Info */}
+              <Card className="shadow-soft border-dashed">
+                <CardContent className="pt-6">
+                  <div className="flex items-start gap-3">
+                    <Info className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                    <div className="text-sm text-muted-foreground">
+                      <p className="font-medium mb-1">
+                        {isRTL ? 'نصائح أمنية' : 'Security Tips'}
+                      </p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>{isRTL ? 'استخدم كلمة مرور قوية وفريدة' : 'Use a strong, unique password'}</li>
+                        <li>{isRTL ? 'لا تشارك بيانات الدخول' : "Don't share your login credentials"}</li>
+                        <li>{isRTL ? 'قم بتسجيل الخروج من الأجهزة العامة' : 'Sign out from public devices'}</li>
+                      </ul>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
