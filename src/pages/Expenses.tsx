@@ -248,22 +248,22 @@ const ExpensesPage = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('unit')} (Optional)</Label>
-                  <Select value={unitId} onValueChange={setUnitId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="General" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">General</SelectItem>
-                      {units.map((unit) => (
-                        <SelectItem key={unit.id} value={unit.id}>
-                          {unit.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label>{t('unit')} (Optional)</Label>
+                <Select value={unitId || 'general'} onValueChange={(val) => setUnitId(val === 'general' ? '' : val)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="General" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="general">General</SelectItem>
+                    {units.map((unit) => (
+                      <SelectItem key={unit.id} value={unit.id}>
+                        {getUnitTypeEmoji(unit.type)} {unit.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
                 <div className="space-y-2">
                   <Label>{t('category')}</Label>

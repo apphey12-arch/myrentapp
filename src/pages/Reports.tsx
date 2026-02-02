@@ -104,10 +104,10 @@ const ReportsPage = () => {
     };
   }, [filteredBookings, expenses]);
 
-  const handleExportPDF = (language: Language) => {
+  const handleExportPDF = async (language: Language) => {
     const activeBookings = filteredBookings.filter(b => b.status !== 'Cancelled');
     
-    generateReportPDF({
+    await generateReportPDF({
       dateRange: dateRange?.from && dateRange?.to
         ? `${format(dateRange.from, 'MMM d, yyyy')} - ${format(dateRange.to, 'MMM d, yyyy')}`
         : 'All Time',
