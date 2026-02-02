@@ -1,81 +1,86 @@
 /**
  * Cairo Font Loader for jsPDF
- * Fetches Cairo font from Google Fonts and converts to Base64 for VFS
+ * Runtime-fetch Cairo TTFs (regular + bold) and convert to Base64 for jsPDF VFS.
+ *
+ * CRITICAL: We do NOT hardcode base64 in repo (prevents build issues).
  */
 
-// Cairo font URL - Regular weight from Google Fonts
-const CAIRO_FONT_URL = 'https://fonts.gstatic.com/s/cairo/v28/SLXgc1nY6HkvangtZmpQdkhzfH5lkSs2SgRjCAGMQ1z0hOA-a13iKjM.ttf';
+// User-specified runtime source
+const CAIRO_REGULAR_URL =
+  'https://raw.githubusercontent.com/googlefonts/cairo/main/fonts/ttf/Cairo-Regular.ttf';
+const CAIRO_BOLD_URL =
+  'https://raw.githubusercontent.com/googlefonts/cairo/main/fonts/ttf/Cairo-Bold.ttf';
 
-let cachedFontBase64: string | null = null;
+type CairoFontVariant = 'regular' | 'bold';
+
+const cache: Partial<Record<CairoFontVariant, string>> = {};
 let fontLoadError: string | null = null;
-let isLoading = false;
+const inFlight: Partial<Record<CairoFontVariant, Promise<string>>> = {};
+
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+};
+
+const fetchFontAsBase64 = async (url: string, label: string): Promise<string> => {
+  const res = await fetch(url, { cache: 'force-cache' });
+  if (!res.ok) {
+    throw new Error(`${label} fetch failed: ${res.status} ${res.statusText}`);
+  }
+  const buf = await res.arrayBuffer();
+  return arrayBufferToBase64(buf);
+};
 
 /**
- * Fetch Cairo font and convert to Base64
- * Caches the result for subsequent calls
+ * Fetch Cairo font (regular/bold) and convert to Base64.
+ * Caches the result for subsequent calls.
  */
-export const fetchCairoFontBase64 = async (): Promise<string> => {
-  // Return cached font if available
-  if (cachedFontBase64) {
-    return cachedFontBase64;
-  }
+export const fetchCairoFontBase64 = async (variant: CairoFontVariant = 'regular'): Promise<string> => {
+  if (cache[variant]) return cache[variant]!;
+  if (fontLoadError) throw new Error(fontLoadError);
+  if (inFlight[variant]) return inFlight[variant]!;
 
-  // If there was a previous error, throw it
-  if (fontLoadError) {
-    throw new Error(fontLoadError);
-  }
+  const url = variant === 'bold' ? CAIRO_BOLD_URL : CAIRO_REGULAR_URL;
+  const label = variant === 'bold' ? 'Cairo Bold' : 'Cairo Regular';
 
-  // Prevent concurrent fetches
-  if (isLoading) {
-    // Wait for the current fetch to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-    return fetchCairoFontBase64();
-  }
-
-  isLoading = true;
-
-  try {
-    console.log('Fetching Cairo font from Google Fonts...');
-    
-    const response = await fetch(CAIRO_FONT_URL);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch font: ${response.status} ${response.statusText}`);
+  inFlight[variant] = (async () => {
+    try {
+      console.log(`[PDF] Fetching ${label} font...`, url);
+      const base64 = await fetchFontAsBase64(url, label);
+      cache[variant] = base64;
+      console.log(`[PDF] ${label} font loaded OK (base64 length=${base64.length})`);
+      return base64;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown font loading error';
+      fontLoadError = `Font Load Error: ${message}`;
+      console.error('[PDF] Font Load Error:', error);
+      throw new Error(fontLoadError);
+    } finally {
+      delete inFlight[variant];
     }
+  })();
 
-    const arrayBuffer = await response.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    
-    // Convert to Base64
-    let binary = '';
-    for (let i = 0; i < uint8Array.length; i++) {
-      binary += String.fromCharCode(uint8Array[i]);
-    }
-    
-    cachedFontBase64 = btoa(binary);
-    console.log('Cairo font loaded successfully, size:', cachedFontBase64.length);
-    
-    return cachedFontBase64;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown font loading error';
-    fontLoadError = `Font Load Error: ${message}`;
-    console.error('Failed to load Cairo font:', error);
-    throw new Error(fontLoadError);
-  } finally {
-    isLoading = false;
-  }
+  return inFlight[variant]!;
 };
 
 /**
  * Check if font is already cached
  */
-export const isFontCached = (): boolean => cachedFontBase64 !== null;
+export const isFontCached = (): boolean => Boolean(cache.regular);
 
 /**
  * Reset font cache (useful for testing)
  */
 export const resetFontCache = (): void => {
-  cachedFontBase64 = null;
+  delete cache.regular;
+  delete cache.bold;
   fontLoadError = null;
-  isLoading = false;
+  delete inFlight.regular;
+  delete inFlight.bold;
 };

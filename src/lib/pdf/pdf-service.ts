@@ -3,12 +3,23 @@ import autoTable from 'jspdf-autotable';
 import { fetchCairoFontBase64 } from './font-loader';
 import { getTranslations, formatCurrency, formatDate, type PdfLanguage } from './translations';
 import type { Booking } from '@/types/database';
+import { shapeText } from './arabic';
 
 // Lessor contact information
 const LESSOR_INFO = {
   whatsApp: '+20 100 123 4567',
   instaPay: 'sunlight.village',
 };
+
+const setRtl = (doc: jsPDF, enabled: boolean) => {
+  const anyDoc = doc as any;
+  // User asked for setRTL(true), but some jsPDF builds expose setR2L(true).
+  if (typeof anyDoc.setRTL === 'function') anyDoc.setRTL(enabled);
+  if (typeof anyDoc.setR2L === 'function') anyDoc.setR2L(enabled);
+  if (typeof anyDoc.setLanguage === 'function') anyDoc.setLanguage(enabled ? 'ar' : 'en');
+};
+
+const tr = (language: PdfLanguage) => (text: string) => shapeText(text, language);
 
 /**
  * Setup jsPDF document with Cairo font for Arabic support
@@ -20,17 +31,29 @@ const setupDocument = async (language: PdfLanguage): Promise<jsPDF> => {
     format: 'a4',
   });
 
-  // Load and register Cairo font
-  const cairoBase64 = await fetchCairoFontBase64();
-  doc.addFileToVFS('Cairo-Regular.ttf', cairoBase64);
+  // Load and register Cairo fonts (runtime fetch)
+  const cairoRegular = await fetchCairoFontBase64('regular');
+  doc.addFileToVFS('Cairo-Regular.ttf', cairoRegular);
   doc.addFont('Cairo-Regular.ttf', 'Cairo', 'normal');
 
-  // Set font and language settings
-  doc.setFont('Cairo', 'normal');
-  
+  // Bold variant (fallback to regular if bold fetch fails)
+  try {
+    const cairoBold = await fetchCairoFontBase64('bold');
+    doc.addFileToVFS('Cairo-Bold.ttf', cairoBold);
+    doc.addFont('Cairo-Bold.ttf', 'Cairo', 'bold');
+  } catch (e) {
+    console.warn('[PDF] Cairo Bold failed to load; using regular for bold.', e);
+    doc.addFileToVFS('Cairo-Bold.ttf', cairoRegular);
+    doc.addFont('Cairo-Bold.ttf', 'Cairo', 'bold');
+  }
+
+  // Language-specific defaults
   if (language === 'ar') {
-    // Enable RTL for Arabic
-    (doc as any).setR2L(true);
+    setRtl(doc, true);
+    doc.setFont('Cairo', 'normal');
+  } else {
+    setRtl(doc, false);
+    doc.setFont('helvetica', 'normal');
   }
 
   return doc;
@@ -39,18 +62,19 @@ const setupDocument = async (language: PdfLanguage): Promise<jsPDF> => {
 /**
  * Add header to PDF
  */
-const addHeader = (doc: jsPDF, title: string, subtitle: string, isRtl: boolean): number => {
+const addHeader = (doc: jsPDF, title: string, subtitle: string, isRtl: boolean, language: PdfLanguage): number => {
+  const tText = tr(language);
   const pageWidth = doc.internal.pageSize.getWidth();
   
   // Brand name
   doc.setFontSize(24);
   doc.setTextColor(12, 74, 110); // primary dark blue
-  doc.text(title, pageWidth / 2, 25, { align: 'center' });
+  doc.text(tText(title), pageWidth / 2, 25, { align: 'center' });
   
   // Subtitle
   doc.setFontSize(14);
   doc.setTextColor(100, 116, 139); // muted gray
-  doc.text(subtitle, pageWidth / 2, 35, { align: 'center' });
+  doc.text(tText(subtitle), pageWidth / 2, 35, { align: 'center' });
   
   // Header line
   doc.setDrawColor(14, 165, 233); // primary blue
@@ -66,6 +90,7 @@ const addHeader = (doc: jsPDF, title: string, subtitle: string, isRtl: boolean):
 const addFooter = (doc: jsPDF, t: ReturnType<typeof getTranslations>, language: PdfLanguage): void => {
   const pageHeight = doc.internal.pageSize.getHeight();
   const pageWidth = doc.internal.pageSize.getWidth();
+  const tText = tr(language);
   
   // Footer line
   doc.setDrawColor(226, 232, 240);
@@ -75,12 +100,12 @@ const addFooter = (doc: jsPDF, t: ReturnType<typeof getTranslations>, language: 
   // Thank you message
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
-  doc.text(t.thankYou, pageWidth / 2, pageHeight - 22, { align: 'center' });
+  doc.text(tText(t.thankYou), pageWidth / 2, pageHeight - 22, { align: 'center' });
   
   // Generated date
   const dateStr = new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US');
   doc.setFontSize(8);
-  doc.text(`${t.generatedOn}: ${dateStr}`, pageWidth / 2, pageHeight - 15, { align: 'center' });
+  doc.text(tText(`${t.generatedOn}: ${dateStr}`), pageWidth / 2, pageHeight - 15, { align: 'center' });
 };
 
 /**
@@ -91,15 +116,16 @@ export const generateBookingReceipt = async (
   language: PdfLanguage
 ): Promise<void> => {
   try {
-    console.log('Generating booking receipt...', { tenant: booking.tenant_name, language });
+    console.log('[PDF] Generating booking receipt...', { tenant: booking.tenant_name, language });
     
     const doc = await setupDocument(language);
     const t = getTranslations(language);
     const isRtl = language === 'ar';
+    const tText = tr(language);
     const pageWidth = doc.internal.pageSize.getWidth();
     
     // Add header
-    let yPos = addHeader(doc, t.brandName, t.bookingReceipt, isRtl);
+    let yPos = addHeader(doc, t.brandName, t.bookingReceipt, isRtl, language);
     
     // Calculate financials
     const baseRent = booking.daily_rate * booking.duration_days;
@@ -110,19 +136,19 @@ export const generateBookingReceipt = async (
     // Tenant Information Table
     doc.setFontSize(12);
     doc.setTextColor(12, 74, 110);
-    doc.text(t.tenantInformation, isRtl ? pageWidth - 20 : 20, yPos, { align: isRtl ? 'right' : 'left' });
+    doc.text(tText(t.tenantInformation), isRtl ? pageWidth - 20 : 20, yPos, { align: isRtl ? 'right' : 'left' });
     yPos += 5;
     
     autoTable(doc, {
       startY: yPos,
       head: [],
       body: [
-        [t.tenantName, booking.tenant_name],
-        ...(booking.phone_number ? [[t.phoneNumber, booking.phone_number]] : []),
+        [tText(t.tenantName), tText(booking.tenant_name)],
+        ...(booking.phone_number ? [[tText(t.phoneNumber), tText(booking.phone_number)]] : []),
       ],
       theme: 'plain',
       styles: {
-        font: 'Cairo',
+        font: language === 'ar' ? 'Cairo' : 'helvetica',
         fontSize: 10,
         cellPadding: 4,
         halign: isRtl ? 'right' : 'left',
@@ -139,19 +165,19 @@ export const generateBookingReceipt = async (
     // Property Details Table
     doc.setFontSize(12);
     doc.setTextColor(12, 74, 110);
-    doc.text(t.propertyDetails, isRtl ? pageWidth - 20 : 20, yPos, { align: isRtl ? 'right' : 'left' });
+    doc.text(tText(t.propertyDetails), isRtl ? pageWidth - 20 : 20, yPos, { align: isRtl ? 'right' : 'left' });
     yPos += 5;
     
     autoTable(doc, {
       startY: yPos,
       head: [],
       body: [
-        [t.unit, booking.unit?.name || 'N/A'],
-        [t.unitType, booking.unit?.type || 'N/A'],
+        [tText(t.unit), tText(booking.unit?.name || 'N/A')],
+        [tText(t.unitType), tText(booking.unit?.type || 'N/A')],
       ],
       theme: 'plain',
       styles: {
-        font: 'Cairo',
+        font: language === 'ar' ? 'Cairo' : 'helvetica',
         fontSize: 10,
         cellPadding: 4,
         halign: isRtl ? 'right' : 'left',
@@ -168,20 +194,20 @@ export const generateBookingReceipt = async (
     // Booking Dates Table
     doc.setFontSize(12);
     doc.setTextColor(12, 74, 110);
-    doc.text(t.bookingDates, isRtl ? pageWidth - 20 : 20, yPos, { align: isRtl ? 'right' : 'left' });
+    doc.text(tText(t.bookingDates), isRtl ? pageWidth - 20 : 20, yPos, { align: isRtl ? 'right' : 'left' });
     yPos += 5;
     
     autoTable(doc, {
       startY: yPos,
       head: [],
       body: [
-        [t.checkIn, formatDate(booking.start_date, language)],
-        [t.checkOut, formatDate(booking.end_date, language)],
-        [t.duration, `${booking.duration_days} ${t.days}`],
+        [tText(t.checkIn), tText(formatDate(booking.start_date, language))],
+        [tText(t.checkOut), tText(formatDate(booking.end_date, language))],
+        [tText(t.duration), tText(`${booking.duration_days} ${t.days}`)],
       ],
       theme: 'plain',
       styles: {
-        font: 'Cairo',
+        font: language === 'ar' ? 'Cairo' : 'helvetica',
         fontSize: 10,
         cellPadding: 4,
         halign: isRtl ? 'right' : 'left',
@@ -198,16 +224,16 @@ export const generateBookingReceipt = async (
     // Financial Breakdown Table
     doc.setFontSize(12);
     doc.setTextColor(12, 74, 110);
-    doc.text(t.financialBreakdown, isRtl ? pageWidth - 20 : 20, yPos, { align: isRtl ? 'right' : 'left' });
+    doc.text(tText(t.financialBreakdown), isRtl ? pageWidth - 20 : 20, yPos, { align: isRtl ? 'right' : 'left' });
     yPos += 5;
     
     const financialRows: string[][] = [
-      [t.dailyRate, formatCurrency(booking.daily_rate)],
-      [`${t.baseRent} (${booking.duration_days} ${t.days})`, formatCurrency(baseRent)],
+      [tText(t.dailyRate), tText(formatCurrency(booking.daily_rate))],
+      [tText(`${t.baseRent} (${booking.duration_days} ${t.days})`), tText(formatCurrency(baseRent))],
     ];
     
     if (housekeeping > 0) {
-      financialRows.push([t.housekeeping, formatCurrency(housekeeping)]);
+      financialRows.push([tText(t.housekeeping), tText(formatCurrency(housekeeping))]);
     }
     
     autoTable(doc, {
@@ -216,7 +242,7 @@ export const generateBookingReceipt = async (
       body: financialRows,
       theme: 'striped',
       styles: {
-        font: 'Cairo',
+        font: language === 'ar' ? 'Cairo' : 'helvetica',
         fontSize: 10,
         cellPadding: 5,
         halign: isRtl ? 'right' : 'left',
@@ -235,8 +261,8 @@ export const generateBookingReceipt = async (
     doc.roundedRect(20, yPos, pageWidth - 40, 15, 2, 2, 'F');
     doc.setFontSize(14);
     doc.setTextColor(255, 255, 255);
-    doc.text(t.grandTotal, isRtl ? pageWidth - 30 : 30, yPos + 10, { align: isRtl ? 'right' : 'left' });
-    doc.text(formatCurrency(grandTotal), isRtl ? 30 : pageWidth - 30, yPos + 10, { align: isRtl ? 'left' : 'right' });
+    doc.text(tText(t.grandTotal), isRtl ? pageWidth - 30 : 30, yPos + 10, { align: isRtl ? 'right' : 'left' });
+    doc.text(tText(formatCurrency(grandTotal)), isRtl ? 30 : pageWidth - 30, yPos + 10, { align: isRtl ? 'left' : 'right' });
     
     yPos += 25;
     
@@ -248,8 +274,8 @@ export const generateBookingReceipt = async (
       doc.roundedRect(20, yPos, pageWidth - 40, 12, 2, 2, 'FD');
       doc.setFontSize(10);
       doc.setTextColor(146, 64, 14); // warning text
-      doc.text(`${t.securityDeposit} ${t.refundable}`, isRtl ? pageWidth - 30 : 30, yPos + 8, { align: isRtl ? 'right' : 'left' });
-      doc.text(formatCurrency(deposit), isRtl ? 30 : pageWidth - 30, yPos + 8, { align: isRtl ? 'left' : 'right' });
+      doc.text(tText(`${t.securityDeposit} ${t.refundable}`), isRtl ? pageWidth - 30 : 30, yPos + 8, { align: isRtl ? 'right' : 'left' });
+      doc.text(tText(formatCurrency(deposit)), isRtl ? 30 : pageWidth - 30, yPos + 8, { align: isRtl ? 'left' : 'right' });
       yPos += 20;
     }
     
@@ -259,12 +285,12 @@ export const generateBookingReceipt = async (
       startY: yPos,
       head: [],
       body: [
-        [t.status, booking.status],
-        [t.paymentStatus, booking.payment_status],
+        [tText(t.status), tText(booking.status)],
+        [tText(t.paymentStatus), tText(booking.payment_status)],
       ],
       theme: 'plain',
       styles: {
-        font: 'Cairo',
+        font: language === 'ar' ? 'Cairo' : 'helvetica',
         fontSize: 10,
         cellPadding: 4,
         halign: isRtl ? 'right' : 'left',
@@ -281,19 +307,19 @@ export const generateBookingReceipt = async (
     // Payment Instructions
     doc.setFontSize(11);
     doc.setTextColor(12, 74, 110);
-    doc.text(t.paymentInstructions, isRtl ? pageWidth - 20 : 20, yPos, { align: isRtl ? 'right' : 'left' });
+    doc.text(tText(t.paymentInstructions), isRtl ? pageWidth - 20 : 20, yPos, { align: isRtl ? 'right' : 'left' });
     yPos += 5;
     
     autoTable(doc, {
       startY: yPos,
       head: [],
       body: [
-        [t.whatsApp, LESSOR_INFO.whatsApp],
-        [t.instaPay, LESSOR_INFO.instaPay],
+        [tText(t.whatsApp), tText(LESSOR_INFO.whatsApp)],
+        [tText(t.instaPay), tText(LESSOR_INFO.instaPay)],
       ],
       theme: 'plain',
       styles: {
-        font: 'Cairo',
+        font: language === 'ar' ? 'Cairo' : 'helvetica',
         fontSize: 10,
         cellPadding: 4,
         halign: isRtl ? 'right' : 'left',
@@ -312,9 +338,9 @@ export const generateBookingReceipt = async (
     const cleanName = booking.tenant_name.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
     doc.save(`Receipt_${cleanName}_${booking.start_date}.pdf`);
     
-    console.log('Booking receipt generated successfully');
+    console.log('[PDF] Booking receipt generated successfully');
   } catch (error) {
-    console.error('Layout Error: Failed to generate booking receipt:', error);
+    console.error('[PDF] Layout Error: Failed to generate booking receipt:', error);
     throw error;
   }
 };
@@ -343,32 +369,32 @@ export const generateFinancialReport = async (
   language: PdfLanguage
 ): Promise<void> => {
   try {
-    console.log('Generating financial report...', { unitCount: data.length, language });
+    console.log('[PDF] Generating financial report...', { unitCount: data.length, language });
     
     const doc = await setupDocument(language);
     const t = getTranslations(language);
     const isRtl = language === 'ar';
+    const tText = tr(language);
     
     // Add header
-    let yPos = addHeader(doc, t.brandName, t.unitPerformanceReport, isRtl);
+    let yPos = addHeader(doc, t.brandName, t.unitPerformanceReport, isRtl, language);
     
     // Prepare table data
-    const tableHead = [[t.unitName, t.unitType, t.totalRevenue, t.expenses, t.netProfit]];
-    const tableBody = data.map(unit => [
-      unit.unitName,
-      unit.unitType,
-      formatCurrency(unit.totalRevenue),
-      formatCurrency(unit.totalExpenses),
-      (unit.netProfit >= 0 ? '+' : '') + formatCurrency(unit.netProfit),
+    // EXACT requested columns: Unit Name | Total Revenue | Expenses | Net Profit
+    const tableHead = [[tText(t.unitName), tText(t.totalRevenue), tText(t.expenses), tText(t.netProfit)]];
+    const tableBody = data.map((unit) => [
+      tText(unit.unitName),
+      tText(formatCurrency(unit.totalRevenue)),
+      tText(formatCurrency(unit.totalExpenses)),
+      tText((unit.netProfit >= 0 ? '+' : '') + formatCurrency(unit.netProfit)),
     ]);
     
     // Add totals row
     tableBody.push([
-      t.total,
-      '—',
-      formatCurrency(totals.totalRevenue),
-      formatCurrency(totals.totalExpenses),
-      (totals.netProfit >= 0 ? '+' : '') + formatCurrency(totals.netProfit),
+      tText(t.total),
+      tText(formatCurrency(totals.totalRevenue)),
+      tText(formatCurrency(totals.totalExpenses)),
+      tText((totals.netProfit >= 0 ? '+' : '') + formatCurrency(totals.netProfit)),
     ]);
     
     // Create table with autotable
@@ -378,7 +404,7 @@ export const generateFinancialReport = async (
       body: tableBody,
       theme: 'striped',
       styles: {
-        font: 'Cairo',
+        font: language === 'ar' ? 'Cairo' : 'helvetica',
         fontSize: 10,
         cellPadding: 5,
         halign: 'center',
@@ -398,10 +424,9 @@ export const generateFinancialReport = async (
       },
       columnStyles: {
         0: { halign: isRtl ? 'right' : 'left' },
-        1: { halign: 'center' },
-        2: { textColor: [22, 163, 74] }, // green for revenue
-        3: { textColor: [220, 38, 38] }, // red for expenses
-        4: { fontStyle: 'bold' }, // net profit - color set per cell would need custom hook
+        1: { textColor: [22, 163, 74] }, // revenue
+        2: { textColor: [220, 38, 38] }, // expenses
+        3: { fontStyle: 'bold' }, // net profit (color set per cell)
       },
       margin: { left: 20, right: 20 },
       didParseCell: (data) => {
@@ -411,21 +436,12 @@ export const generateFinancialReport = async (
           data.cell.styles.fillColor = [224, 242, 254];
         }
         
-        // Color net profit column based on value
-        if (data.column.index === 4 && data.section === 'body') {
-          const value = data.row.index < data.table.body.length - 1 
-            ? data.row.index < data.table.body.length 
-              ? (data.row.index === tableBody.length - 1 ? totals.netProfit : data.row.index >= 0 ? data.table.body[data.row.index].raw[4] : 0)
-              : 0
-            : totals.netProfit;
-          
-          // Check if the cell text starts with '-' or '+'
+        // Color net profit column based on sign
+        if (data.column.index === 3 && data.section === 'body') {
           const cellText = String(data.cell.raw || '');
-          if (cellText.startsWith('-')) {
-            data.cell.styles.textColor = [220, 38, 38]; // red
-          } else {
-            data.cell.styles.textColor = [22, 163, 74]; // green
-          }
+          data.cell.styles.textColor = cellText.trim().startsWith('-')
+            ? [220, 38, 38]
+            : [22, 163, 74];
         }
       },
     });
@@ -475,9 +491,9 @@ export const generateFinancialReport = async (
     const dateStr = new Date().toISOString().split('T')[0];
     doc.save(`Financial_Report_${dateStr}.pdf`);
     
-    console.log('Financial report generated successfully');
+    console.log('[PDF] Financial report generated successfully');
   } catch (error) {
-    console.error('Layout Error: Failed to generate financial report:', error);
+    console.error('[PDF] Layout Error: Failed to generate financial report:', error);
     throw error;
   }
 };
