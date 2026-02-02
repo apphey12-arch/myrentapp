@@ -1,14 +1,20 @@
 // PDF Generation Service
-// Clean, standalone PDF engine with Arabic support using @react-pdf/renderer
+// Clean jsPDF-based engine with Arabic support
 
 export { 
   generateBookingReceipt, 
-  generateFinancialReport, 
-  type PdfLanguage 
+  generateFinancialReport,
+  type UnitPerformanceData,
 } from './pdf-service';
 
 export { 
-  registerCairoFont, 
-  isFontRegistered,
-  getFontError 
+  type PdfLanguage,
+  getTranslations,
+  formatCurrency,
+  formatDate,
+} from './translations';
+
+export { 
+  fetchCairoFontBase64,
+  isFontCached,
 } from './font-loader';
