@@ -18,12 +18,16 @@ export type Database = {
         Row: {
           created_at: string
           daily_rate: number
+          deposit_amount: number | null
           deposit_paid: boolean
           duration_days: number
           end_date: string
+          housekeeping_amount: number | null
           housekeeping_required: boolean
           id: string
           notes: string | null
+          payment_status: Database["public"]["Enums"]["payment_status"] | null
+          phone_number: string | null
           start_date: string
           status: Database["public"]["Enums"]["booking_status"]
           tenant_name: string
@@ -36,12 +40,16 @@ export type Database = {
         Insert: {
           created_at?: string
           daily_rate: number
+          deposit_amount?: number | null
           deposit_paid?: boolean
           duration_days: number
           end_date: string
+          housekeeping_amount?: number | null
           housekeeping_required?: boolean
           id?: string
           notes?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status"] | null
+          phone_number?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["booking_status"]
           tenant_name: string
@@ -54,12 +62,16 @@ export type Database = {
         Update: {
           created_at?: string
           daily_rate?: number
+          deposit_amount?: number | null
           deposit_paid?: boolean
           duration_days?: number
           end_date?: string
+          housekeeping_amount?: number | null
           housekeeping_required?: boolean
           id?: string
           notes?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status"] | null
+          phone_number?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["booking_status"]
           tenant_name?: string
@@ -72,6 +84,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "bookings_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          description: string
+          expense_date: string
+          id: string
+          notes: string | null
+          unit_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category?: string
+          created_at?: string
+          description: string
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          unit_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          description?: string
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          unit_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_unit_id_fkey"
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
@@ -139,6 +198,7 @@ export type Database = {
     }
     Enums: {
       booking_status: "Confirmed" | "Unconfirmed" | "Cancelled"
+      payment_status: "Paid" | "Pending" | "Overdue"
       tenant_rating: "Welcome Back" | "Do Not Rent Again"
       unit_type: "Villa" | "Chalet" | "Palace"
     }
@@ -269,6 +329,7 @@ export const Constants = {
   public: {
     Enums: {
       booking_status: ["Confirmed", "Unconfirmed", "Cancelled"],
+      payment_status: ["Paid", "Pending", "Overdue"],
       tenant_rating: ["Welcome Back", "Do Not Rent Again"],
       unit_type: ["Villa", "Chalet", "Palace"],
     },

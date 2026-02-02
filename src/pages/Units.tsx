@@ -5,7 +5,8 @@ import { UnitCard } from '@/components/units/UnitCard';
 import { UnitFormModal } from '@/components/units/UnitFormModal';
 import { Button } from '@/components/ui/button';
 import { Plus, Building, Loader2 } from 'lucide-react';
-import { Unit, UnitType } from '@/types/database';
+import { Unit, UnitType, getUnitTypeEmoji } from '@/types/database';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +19,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const UnitsPage = () => {
+  const { t } = useLanguage();
   const { units, isLoading, createUnit, updateUnit, deleteUnit } = useUnits();
   const [formOpen, setFormOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
@@ -54,12 +56,12 @@ const UnitsPage = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="font-display text-3xl font-bold text-foreground">My Units</h1>
+            <h1 className="font-display text-3xl font-bold text-foreground">{t('myUnits')}</h1>
             <p className="text-muted-foreground mt-1">Manage your properties</p>
           </div>
           <Button onClick={() => setFormOpen(true)} className="gradient-ocean gap-2">
             <Plus className="h-4 w-4" />
-            Add Unit
+            {t('add')} {t('unit')}
           </Button>
         </div>
 

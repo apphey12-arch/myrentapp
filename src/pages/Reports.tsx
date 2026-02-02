@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useBookings } from '@/hooks/useBookings';
 import { useUnits } from '@/hooks/useUnits';
+import { useExpenses } from '@/hooks/useExpenses';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,15 +18,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CalendarIcon, FileText, Loader2, TrendingUp, Calendar as CalendarIconLucide, DollarSign } from 'lucide-react';
+import { CalendarIcon, FileText, Loader2, TrendingUp, Calendar as CalendarIconLucide, DollarSign, TrendingDown } from 'lucide-react';
 import { format, parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { formatEGP, formatEGPCompact } from '@/lib/currency';
 import { formatDateRange } from '@/lib/date-utils';
 import { generateReportPDF } from '@/lib/pdf-generator';
 import { DateRange } from 'react-day-picker';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { getUnitTypeEmoji } from '@/types/database';
 
 const ReportsPage = () => {
+  const { t } = useLanguage();
   const [unitFilter, setUnitFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: startOfMonth(new Date()),
@@ -34,6 +38,7 @@ const ReportsPage = () => {
 
   const { units, isLoading: unitsLoading } = useUnits();
   const { bookings, isLoading: bookingsLoading } = useBookings();
+  const { expenses } = useExpenses();
 
   const isLoading = unitsLoading || bookingsLoading;
 
@@ -72,6 +77,11 @@ const ReportsPage = () => {
       0
     );
 
+    const totalExpenses = expenses.reduce(
+      (sum, e) => sum + Number(e.amount),
+      0
+    );
+
     const occupiedDays = activeBookings.reduce(
       (sum, b) => sum + b.duration_days,
       0
@@ -83,12 +93,14 @@ const ReportsPage = () => {
 
     return {
       totalRevenue,
+      totalExpenses,
+      netIncome: totalRevenue - totalExpenses,
       totalBookings: filteredBookings.length,
       occupiedDays,
       avgDailyRate,
       confirmedBookings: filteredBookings.filter(b => b.status === 'Confirmed').length,
     };
-  }, [filteredBookings]);
+  }, [filteredBookings, expenses]);
 
   const handleExportPDF = () => {
     const activeBookings = filteredBookings.filter(b => b.status !== 'Cancelled');
@@ -101,6 +113,8 @@ const ReportsPage = () => {
         ? 'All Units' 
         : units.find(u => u.id === unitFilter)?.name || 'Unknown',
       totalRevenue: stats.totalRevenue,
+      totalExpenses: stats.totalExpenses,
+      netIncome: stats.netIncome,
       totalBookings: stats.totalBookings,
       occupiedDays: stats.occupiedDays,
       averageDailyRate: stats.avgDailyRate,
@@ -110,6 +124,7 @@ const ReportsPage = () => {
         dates: formatDateRange(b.start_date, b.end_date),
         amount: b.total_amount,
         status: b.status,
+        paymentStatus: b.payment_status || 'Pending',
       })),
     });
   };

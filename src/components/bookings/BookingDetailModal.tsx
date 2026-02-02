@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Booking, BookingStatus, TenantRating, Unit } from '@/types/database';
+import { Booking, BookingStatus, PaymentStatus, TenantRating, Unit, getUnitTypeEmoji } from '@/types/database';
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,7 @@ import { formatEGP } from '@/lib/currency';
 import { calculateEndDate, calculateTotalAmount } from '@/lib/date-utils';
 import { UpdateBookingData } from '@/hooks/useBookings';
 import { generateBookingPDF } from '@/lib/pdf-generator';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface BookingDetailModalProps {
   open: boolean;
@@ -43,6 +44,7 @@ interface BookingDetailModalProps {
 }
 
 const statusOptions: BookingStatus[] = ['Unconfirmed', 'Confirmed', 'Cancelled'];
+const paymentStatusOptions: PaymentStatus[] = ['Pending', 'Paid', 'Overdue'];
 const ratingOptions: { value: TenantRating; label: string; icon: typeof ThumbsUp }[] = [
   { value: 'Welcome Back', label: 'Welcome Back', icon: ThumbsUp },
   { value: 'Do Not Rent Again', label: 'Do Not Rent Again', icon: ThumbsDown },
@@ -56,14 +58,23 @@ export const BookingDetailModal = ({
   onUpdate,
   onDelete,
 }: BookingDetailModalProps) => {
+  const { t } = useLanguage();
+  
   const [unitId, setUnitId] = useState('');
   const [tenantName, setTenantName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [startDate, setStartDate] = useState<Date>();
   const [durationDays, setDurationDays] = useState(1);
   const [dailyRate, setDailyRate] = useState(0);
   const [status, setStatus] = useState<BookingStatus>('Unconfirmed');
-  const [depositPaid, setDepositPaid] = useState(false);
-  const [housekeepingRequired, setHousekeepingRequired] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Pending');
+  
+  // Dynamic pricing
+  const [depositEnabled, setDepositEnabled] = useState(false);
+  const [depositAmount, setDepositAmount] = useState(0);
+  const [housekeepingEnabled, setHousekeepingEnabled] = useState(false);
+  const [housekeepingAmount, setHousekeepingAmount] = useState(0);
+  
   const [notes, setNotes] = useState('');
   const [tenantRating, setTenantRating] = useState<TenantRating | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,12 +84,16 @@ export const BookingDetailModal = ({
     if (booking) {
       setUnitId(booking.unit_id);
       setTenantName(booking.tenant_name);
+      setPhoneNumber(booking.phone_number || '');
       setStartDate(parseISO(booking.start_date));
       setDurationDays(booking.duration_days);
       setDailyRate(booking.daily_rate);
       setStatus(booking.status);
-      setDepositPaid(booking.deposit_paid);
-      setHousekeepingRequired(booking.housekeeping_required);
+      setPaymentStatus(booking.payment_status || 'Pending');
+      setDepositEnabled(booking.deposit_paid);
+      setDepositAmount(booking.deposit_amount || 0);
+      setHousekeepingEnabled(booking.housekeeping_required);
+      setHousekeepingAmount(booking.housekeeping_amount || 0);
       setNotes(booking.notes || '');
       setTenantRating(booking.tenant_rating);
     }
@@ -89,9 +104,13 @@ export const BookingDetailModal = ({
     return calculateEndDate(startDate, durationDays);
   }, [startDate, durationDays]);
 
+  // Dynamic total calculation
   const totalAmount = useMemo(() => {
-    return calculateTotalAmount(dailyRate, durationDays);
-  }, [dailyRate, durationDays]);
+    const baseAmount = calculateTotalAmount(dailyRate, durationDays);
+    const deposit = depositEnabled ? depositAmount : 0;
+    const housekeeping = housekeepingEnabled ? housekeepingAmount : 0;
+    return baseAmount + deposit + housekeeping;
+  }, [dailyRate, durationDays, depositEnabled, depositAmount, housekeepingEnabled, housekeepingAmount]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,14 +122,18 @@ export const BookingDetailModal = ({
         id: booking.id,
         unit_id: unitId,
         tenant_name: tenantName.trim(),
+        phone_number: phoneNumber.trim() || undefined,
         start_date: format(startDate, 'yyyy-MM-dd'),
         duration_days: durationDays,
         end_date: format(endDate, 'yyyy-MM-dd'),
         daily_rate: dailyRate,
         total_amount: totalAmount,
         status,
-        deposit_paid: depositPaid,
-        housekeeping_required: housekeepingRequired,
+        payment_status: paymentStatus,
+        deposit_paid: depositEnabled,
+        deposit_amount: depositEnabled ? depositAmount : 0,
+        housekeeping_required: housekeepingEnabled,
+        housekeeping_amount: housekeepingEnabled ? housekeepingAmount : 0,
         notes: notes.trim() || undefined,
         tenant_rating: tenantRating,
       });
@@ -136,15 +159,19 @@ export const BookingDetailModal = ({
     const unit = units.find(u => u.id === unitId);
     generateBookingPDF({
       tenantName,
+      phoneNumber,
       unitName: unit?.name || '',
       unitType: unit?.type || 'Chalet',
       startDate: format(startDate!, 'PPP'),
       endDate: format(endDate, 'PPP'),
       durationDays,
       dailyRate,
+      depositAmount: depositEnabled ? depositAmount : 0,
+      housekeepingAmount: housekeepingEnabled ? housekeepingAmount : 0,
       totalAmount,
       status,
-      depositPaid,
+      paymentStatus,
+      depositPaid: depositEnabled,
     });
   };
 
@@ -162,22 +189,22 @@ export const BookingDetailModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader className="flex flex-row items-center justify-between">
-          <DialogTitle className="font-display">Booking Details</DialogTitle>
+          <DialogTitle className="font-display">{t('edit')} Booking</DialogTitle>
           <Badge variant={getStatusBadgeVariant(status)}>{status}</Badge>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Unit</Label>
+              <Label>{t('unit')}</Label>
               <Select value={unitId} onValueChange={setUnitId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select unit" />
+                  <SelectValue placeholder={t('unit')} />
                 </SelectTrigger>
                 <SelectContent>
                   {units.map((unit) => (
                     <SelectItem key={unit.id} value={unit.id}>
-                      {unit.name}
+                      {getUnitTypeEmoji(unit.type)} {unit.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -185,7 +212,7 @@ export const BookingDetailModal = ({
             </div>
 
             <div className="space-y-2">
-              <Label>Status</Label>
+              <Label>{t('status')}</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as BookingStatus)}>
                 <SelectTrigger>
                   <SelectValue />
@@ -193,7 +220,7 @@ export const BookingDetailModal = ({
                 <SelectContent>
                   {statusOptions.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {s}
+                      {t(s.toLowerCase())}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -201,19 +228,47 @@ export const BookingDetailModal = ({
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>{t('tenantName')}</Label>
+              <Input
+                placeholder={t('tenantName')}
+                value={tenantName}
+                onChange={(e) => setTenantName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t('phoneNumber')}</Label>
+              <Input
+                placeholder={t('phoneNumber')}
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                type="tel"
+              />
+            </div>
+          </div>
+
           <div className="space-y-2">
-            <Label>Tenant Name</Label>
-            <Input
-              placeholder="Enter tenant name"
-              value={tenantName}
-              onChange={(e) => setTenantName(e.target.value)}
-              required
-            />
+            <Label>{t('paymentStatus')}</Label>
+            <Select value={paymentStatus} onValueChange={(v) => setPaymentStatus(v as PaymentStatus)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {paymentStatusOptions.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {t(s.toLowerCase())}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Start Date</Label>
+              <Label>{t('startDate')}</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -224,7 +279,7 @@ export const BookingDetailModal = ({
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {startDate ? format(startDate, 'PPP') : 'Pick a date'}
+                    {startDate ? format(startDate, 'PPP') : t('startDate')}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
@@ -239,7 +294,7 @@ export const BookingDetailModal = ({
             </div>
 
             <div className="space-y-2">
-              <Label>Duration (Days)</Label>
+              <Label>{t('duration')}</Label>
               <Input
                 type="number"
                 min={1}
@@ -252,14 +307,14 @@ export const BookingDetailModal = ({
 
           {endDate && (
             <div className="rounded-lg bg-secondary/50 p-3 text-sm">
-              <span className="text-muted-foreground">End Date: </span>
+              <span className="text-muted-foreground">{t('endDate')}: </span>
               <span className="font-medium">{format(endDate, 'PPP')}</span>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Daily Rate (EGP)</Label>
+              <Label>{t('dailyRate')} (EGP)</Label>
               <Input
                 type="number"
                 min={0}
@@ -271,35 +326,59 @@ export const BookingDetailModal = ({
             </div>
 
             <div className="space-y-2">
-              <Label>Total Amount</Label>
+              <Label>{t('totalAmount')}</Label>
               <div className="flex h-10 items-center rounded-md border bg-muted/50 px-3 font-semibold text-primary">
                 {formatEGP(totalAmount)}
               </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          {/* Deposit Toggle with Amount */}
+          <div className="space-y-3 rounded-lg border p-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="deposit-edit" className="cursor-pointer">{t('deposit')}</Label>
               <Switch
-                checked={depositPaid}
-                onCheckedChange={setDepositPaid}
-                id="deposit"
+                checked={depositEnabled}
+                onCheckedChange={setDepositEnabled}
+                id="deposit-edit"
               />
-              <Label htmlFor="deposit">Deposit Paid</Label>
             </div>
+            {depositEnabled && (
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder={`${t('deposit')} (EGP)`}
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(parseFloat(e.target.value) || 0)}
+              />
+            )}
+          </div>
 
-            <div className="flex items-center gap-2">
+          {/* Housekeeping Toggle with Amount */}
+          <div className="space-y-3 rounded-lg border p-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="housekeeping-edit" className="cursor-pointer">{t('housekeeping')}</Label>
               <Switch
-                checked={housekeepingRequired}
-                onCheckedChange={setHousekeepingRequired}
-                id="housekeeping"
+                checked={housekeepingEnabled}
+                onCheckedChange={setHousekeepingEnabled}
+                id="housekeeping-edit"
               />
-              <Label htmlFor="housekeeping">Housekeeping</Label>
             </div>
+            {housekeepingEnabled && (
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder={`${t('housekeeping')} (EGP)`}
+                value={housekeepingAmount}
+                onChange={(e) => setHousekeepingAmount(parseFloat(e.target.value) || 0)}
+              />
+            )}
           </div>
 
           <div className="space-y-2">
-            <Label>Tenant Rating</Label>
+            <Label>{t('tenantRating')}</Label>
             <div className="flex gap-2">
               {ratingOptions.map((option) => (
                 <Button
@@ -323,9 +402,9 @@ export const BookingDetailModal = ({
           </div>
 
           <div className="space-y-2">
-            <Label>Notes</Label>
+            <Label>{t('notes')}</Label>
             <Textarea
-              placeholder="Any special requirements..."
+              placeholder={t('notes')}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
@@ -340,7 +419,7 @@ export const BookingDetailModal = ({
               className="flex-1"
             >
               <FileText className="h-4 w-4 mr-2" />
-              Print Receipt
+              {t('printReceipt')}
             </Button>
             
             <Button
@@ -355,7 +434,7 @@ export const BookingDetailModal = ({
               ) : (
                 <>
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
+                  {t('delete')}
                 </>
               )}
             </Button>
@@ -367,7 +446,7 @@ export const BookingDetailModal = ({
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
@@ -377,7 +456,7 @@ export const BookingDetailModal = ({
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                'Save Changes'
+                t('save')
               )}
             </Button>
           </div>

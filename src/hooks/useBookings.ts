@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Booking, BookingStatus, TenantRating } from '@/types/database';
+import { Booking, BookingStatus, PaymentStatus, TenantRating } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import { checkDateOverlap } from '@/lib/date-utils';
 import { parseISO } from 'date-fns';
@@ -8,14 +8,18 @@ import { parseISO } from 'date-fns';
 export interface CreateBookingData {
   unit_id: string;
   tenant_name: string;
+  phone_number?: string;
   start_date: string;
   duration_days: number;
   end_date: string;
   daily_rate: number;
   total_amount: number;
   status: BookingStatus;
+  payment_status?: PaymentStatus;
   deposit_paid?: boolean;
+  deposit_amount?: number;
   housekeeping_required?: boolean;
+  housekeeping_amount?: number;
   notes?: string;
 }
 
@@ -24,12 +28,12 @@ export interface UpdateBookingData extends Partial<CreateBookingData> {
   tenant_rating?: TenantRating | null;
 }
 
-export const useBookings = (unitFilter?: string) => {
+export const useBookings = (unitFilter?: string, searchQuery?: string, unitTypeFilter?: string) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: bookings = [], isLoading, error } = useQuery({
-    queryKey: ['bookings', unitFilter],
+    queryKey: ['bookings', unitFilter, searchQuery, unitTypeFilter],
     queryFn: async () => {
       let query = supabase
         .from('bookings')
@@ -46,7 +50,26 @@ export const useBookings = (unitFilter?: string) => {
       const { data, error } = await query;
       
       if (error) throw error;
-      return data as Booking[];
+      
+      let filteredData = data as Booking[];
+      
+      // Client-side search filter
+      if (searchQuery && searchQuery.trim()) {
+        const search = searchQuery.toLowerCase().trim();
+        filteredData = filteredData.filter(booking => 
+          booking.tenant_name.toLowerCase().includes(search) ||
+          (booking.phone_number && booking.phone_number.includes(search))
+        );
+      }
+      
+      // Client-side unit type filter
+      if (unitTypeFilter && unitTypeFilter !== 'all') {
+        filteredData = filteredData.filter(booking => 
+          booking.unit?.type === unitTypeFilter
+        );
+      }
+      
+      return filteredData;
     },
   });
 

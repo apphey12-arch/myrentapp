@@ -21,8 +21,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Loader2 } from 'lucide-react';
-import { Booking } from '@/types/database';
+import { Booking, getUnitTypeEmoji } from '@/types/database';
 import { formatEGP } from '@/lib/currency';
+import { useLanguage } from '@/contexts/LanguageContext';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 const locales = {
@@ -46,6 +47,7 @@ interface CalendarEvent {
 }
 
 const CalendarPage = () => {
+  const { t } = useLanguage();
   const [unitFilter, setUnitFilter] = useState<string>('all');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [view, setView] = useState<View>('month');
@@ -137,7 +139,7 @@ const CalendarPage = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="font-display text-3xl font-bold text-foreground">Calendar</h1>
+            <h1 className="font-display text-3xl font-bold text-foreground">{t('calendar')}</h1>
             <p className="text-muted-foreground mt-1">Visual overview of all bookings</p>
           </div>
 

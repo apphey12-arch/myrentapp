@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { 
@@ -9,36 +9,44 @@ import {
   LogOut,
   Sun,
   Menu,
-  X
+  X,
+  Settings,
+  Receipt
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { useState } from 'react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
-const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/units', label: 'My Units', icon: Home },
-  { path: '/calendar', label: 'Calendar', icon: Calendar },
-  { path: '/reports', label: 'Reports', icon: BarChart3 },
-];
-
 export const AppLayout = ({ children }: AppLayoutProps) => {
   const location = useLocation();
   const { signOut } = useAuth();
+  const { t, isRTL } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const navItems = [
+    { path: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
+    { path: '/units', label: t('myUnits'), icon: Home },
+    { path: '/calendar', label: t('calendar'), icon: Calendar },
+    { path: '/expenses', label: t('expenses'), icon: Receipt },
+    { path: '/reports', label: t('reports'), icon: BarChart3 },
+    { path: '/settings', label: t('settings'), icon: Settings },
+  ];
 
   const handleSignOut = async () => {
     await signOut();
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={cn("min-h-screen bg-background", isRTL && "rtl")}>
       {/* Sidebar - Desktop */}
-      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 lg:block">
+      <aside className={cn(
+        "fixed top-0 z-40 hidden h-screen w-64 lg:block",
+        isRTL ? "right-0" : "left-0"
+      )}>
         <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
           {/* Logo */}
           <div className="flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
@@ -83,14 +91,16 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
               className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
               <LogOut className="h-5 w-5" />
-              Sign Out
+              {t('signOut')}
             </Button>
           </div>
         </div>
       </aside>
 
       {/* Mobile Header */}
-      <header className="fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
+      <header className={cn(
+        "fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden"
+      )}>
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-ocean">
             <Sun className="h-4 w-4 text-primary-foreground" />
@@ -135,14 +145,14 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
               className="w-full justify-start gap-3 text-muted-foreground hover:bg-secondary"
             >
               <LogOut className="h-5 w-5" />
-              Sign Out
+              {t('signOut')}
             </Button>
           </nav>
         </div>
       )}
 
       {/* Main Content */}
-      <main className="lg:pl-64">
+      <main className={cn(isRTL ? "lg:pr-64" : "lg:pl-64")}>
         <div className="min-h-screen pt-16 lg:pt-0">
           {children}
         </div>

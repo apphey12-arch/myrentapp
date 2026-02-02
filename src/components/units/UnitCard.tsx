@@ -1,4 +1,4 @@
-import { Unit } from '@/types/database';
+import { Unit, getUnitTypeEmoji } from '@/types/database';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,7 +37,9 @@ export const UnitCard = ({ unit, onEdit, onDelete }: UnitCardProps) => {
               <Icon className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-semibold text-foreground">{unit.name}</h3>
+              <h3 className="font-semibold text-foreground">
+                {getUnitTypeEmoji(unit.type)} {unit.name}
+              </h3>
               <Badge variant="secondary" className="mt-1">
                 {unit.type}
               </Badge>
