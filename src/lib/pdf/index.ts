@@ -1,9 +1,10 @@
 // PDF Generation Service
-// Clean jsPDF-based engine with Arabic support
+// DOM-to-PDF pipeline with Arabic support
 
 export { 
   generateBookingReceipt, 
   generateFinancialReport,
+  generateBookingsReport,
   type UnitPerformanceData,
 } from './pdf-service';
 
@@ -14,9 +15,4 @@ export {
   formatDate,
 } from './translations';
 
-export { 
-  fetchCairoFontBase64,
-  isFontCached,
-} from './font-loader';
-
-export { shapeText, containsArabic } from './arabic';
+export type { BookingsReportOptions } from './dom/bookings-report-template';
