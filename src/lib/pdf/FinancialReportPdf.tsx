@@ -39,7 +39,11 @@ export const FinancialReportPdf: React.FC<FinancialReportPdfProps> = ({
   const rowBaseStyle = isRtl ? pdfStyles.tableRowRtl : pdfStyles.tableRow;
 
   return (
-    <Document>
+    <Document
+      title={t.unitPerformanceReport}
+      author="Sunlight Village"
+      language={language}
+    >
       <Page size="A4" style={pdfStyles.page}>
         {/* Header */}
         <View style={pdfStyles.header}>
