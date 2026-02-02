@@ -1,7 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useBookings } from '@/hooks/useBookings';
 import { useUnits } from '@/hooks/useUnits';
-import { useExpenses } from '@/hooks/useExpenses';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { BookingsTable } from '@/components/bookings/BookingsTable';
 import { BookingFormModal } from '@/components/bookings/BookingFormModal';
@@ -9,7 +8,7 @@ import { BookingDetailModal } from '@/components/bookings/BookingDetailModal';
 import { TenantDetailModal } from '@/components/bookings/TenantDetailModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -22,8 +21,6 @@ import { Booking, UnitType, getUnitTypeEmoji } from '@/types/database';
 import { formatEGP, formatEGPCompact } from '@/lib/currency';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 
 const DashboardPage = () => {
   const { t } = useLanguage();
@@ -36,7 +33,6 @@ const DashboardPage = () => {
 
   const { units, isLoading: unitsLoading } = useUnits();
   const { bookings, isLoading: bookingsLoading, createBooking, updateBooking, deleteBooking } = useBookings(unitFilter, searchQuery, unitTypeFilter);
-  const { expenses } = useExpenses();
 
   const isLoading = unitsLoading || bookingsLoading;
 
@@ -51,40 +47,6 @@ const DashboardPage = () => {
   const avgDailyRate = activeBookings.length > 0
     ? activeBookings.reduce((sum, b) => sum + Number(b.daily_rate), 0) / activeBookings.length
     : 0;
-
-  // Chart data - Revenue vs Expenses by month
-  const chartData = useMemo(() => {
-    const now = new Date();
-    const months = eachMonthOfInterval({
-      start: subMonths(now, 5),
-      end: now,
-    });
-
-    return months.map(month => {
-      const monthStart = startOfMonth(month);
-      const monthEnd = endOfMonth(month);
-
-      const monthRevenue = activeBookings
-        .filter(b => {
-          const startDate = new Date(b.start_date);
-          return startDate >= monthStart && startDate <= monthEnd;
-        })
-        .reduce((sum, b) => sum + (Number(b.daily_rate) * Number(b.duration_days)), 0);
-
-      const monthExpenses = expenses
-        .filter(e => {
-          const expenseDate = new Date(e.expense_date);
-          return expenseDate >= monthStart && expenseDate <= monthEnd;
-        })
-        .reduce((sum, e) => sum + Number(e.amount), 0);
-
-      return {
-        month: format(month, 'MMM'),
-        revenue: monthRevenue,
-        expenses: monthExpenses,
-      };
-    });
-  }, [activeBookings, expenses]);
 
   const handleCreateBooking = async (data: any) => {
     await createBooking.mutateAsync(data);
@@ -195,35 +157,6 @@ const DashboardPage = () => {
             </CardContent>
           </Card>
         </div>
-
-        {/* Revenue vs Expenses Chart */}
-        <Card className="shadow-soft mb-8">
-          <CardHeader>
-            <CardTitle>{t('revenueVsExpenses')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="month" className="text-xs" />
-                  <YAxis className="text-xs" />
-                  <Tooltip 
-                    formatter={(value: number) => formatEGP(value)}
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--background))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="revenue" name={t('revenue')} fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="expenses" name={t('expenses')} fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">

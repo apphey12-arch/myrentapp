@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarIcon, Loader2, TrendingUp, Calendar as CalendarIconLucide, DollarSign, Building2, FileText } from 'lucide-react';
+import { CalendarIcon, Loader2, TrendingUp, Calendar as CalendarIconLucide, DollarSign, Building2, FileText, Download } from 'lucide-react';
 import { format, parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { formatEGP, formatEGPCompact } from '@/lib/currency';
@@ -27,6 +27,9 @@ import { formatDateRange } from '@/lib/date-utils';
 import { DateRange } from 'react-day-picker';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getUnitTypeEmoji } from '@/types/database';
+import { PdfLanguageModal } from '@/components/pdf/PdfLanguageModal';
+import { generateBookingsReport, PdfLanguage } from '@/lib/pdf';
+import { toast } from '@/hooks/use-toast';
 
 interface UnitPerformanceData {
   unitName: string;
@@ -43,6 +46,7 @@ const ReportsPage = () => {
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date()),
   });
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
 
   const { units, isLoading: unitsLoading } = useUnits();
   const { bookings, isLoading: bookingsLoading } = useBookings();
@@ -119,6 +123,45 @@ const ReportsPage = () => {
     });
   }, [units, bookings, expenses]);
 
+  // Generate date range label for PDF
+  const dateRangeLabel = useMemo(() => {
+    if (dateRange?.from && dateRange?.to) {
+      return `${format(dateRange.from, 'MMM d, yyyy')} - ${format(dateRange.to, 'MMM d, yyyy')}`;
+    }
+    return 'All Time';
+  }, [dateRange]);
+
+  // Handle PDF export
+  const handleExportPdf = async (language: PdfLanguage) => {
+    try {
+      const activeBookings = filteredBookings.filter(b => b.status !== 'Cancelled');
+      const totalRevenue = activeBookings.reduce(
+        (sum, b) => sum + (Number(b.daily_rate) * Number(b.duration_days)),
+        0
+      );
+
+      await generateBookingsReport({
+        bookings: activeBookings,
+        dateRangeLabel,
+        totalRevenue,
+        language,
+      });
+
+      toast({
+        title: 'Report Downloaded',
+        description: 'Your detailed bookings report has been generated successfully.',
+      });
+    } catch (error) {
+      console.error('Failed to generate report:', error);
+      toast({
+        title: 'Export Failed',
+        description: 'Failed to generate the PDF. Please try again.',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
+
   return (
     <AppLayout>
       <div className="p-6 lg:p-8">
@@ -128,6 +171,13 @@ const ReportsPage = () => {
             <h1 className="font-display text-3xl font-bold text-foreground">{t('reports')}</h1>
             <p className="text-muted-foreground mt-1">Financial analytics and insights</p>
           </div>
+          <Button 
+            onClick={() => setPdfModalOpen(true)}
+            className="gradient-ocean gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Download Detailed PDF Report
+          </Button>
         </div>
 
         {/* Filters */}
@@ -171,6 +221,7 @@ const ReportsPage = () => {
                       selected={dateRange}
                       onSelect={setDateRange}
                       numberOfMonths={2}
+                      className="pointer-events-auto"
                     />
                   </PopoverContent>
                 </Popover>
@@ -391,6 +442,14 @@ const ReportsPage = () => {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* PDF Language Modal */}
+        <PdfLanguageModal
+          open={pdfModalOpen}
+          onOpenChange={setPdfModalOpen}
+          onConfirm={handleExportPdf}
+          title="Export Bookings Report"
+        />
       </div>
     </AppLayout>
   );
