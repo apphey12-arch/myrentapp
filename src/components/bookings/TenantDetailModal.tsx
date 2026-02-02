@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Booking, getUnitTypeEmoji } from '@/types/database';
 import {
   Dialog,
@@ -11,7 +12,10 @@ import { formatEGP } from '@/lib/currency';
 import { formatDateRange } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { Phone, MessageCircle, Calendar, Home } from 'lucide-react';
+import { Phone, MessageCircle, Calendar, Home, Download, Loader2 } from 'lucide-react';
+import { generateBookingReceipt, PdfLanguage } from '@/lib/pdf';
+import { PdfLanguageModal } from '@/components/pdf/PdfLanguageModal';
+import { toast } from '@/hooks/use-toast';
 
 interface TenantDetailModalProps {
   open: boolean;
@@ -40,6 +44,7 @@ const openWhatsApp = (phone: string, tenantName: string) => {
 
 export const TenantDetailModal = ({ open, onOpenChange, booking }: TenantDetailModalProps) => {
   const { t } = useLanguage();
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
 
   if (!booking) return null;
 
@@ -47,6 +52,24 @@ export const TenantDetailModal = ({ open, onOpenChange, booking }: TenantDetailM
   const baseAmount = booking.daily_rate * booking.duration_days;
   const housekeepingAmount = booking.housekeeping_amount || 0;
   const totalRent = baseAmount + housekeepingAmount;
+
+  const handleDownloadReceipt = async (language: PdfLanguage) => {
+    try {
+      await generateBookingReceipt(booking, language);
+      toast({
+        title: 'Receipt Downloaded',
+        description: 'Your booking receipt has been generated successfully.',
+      });
+    } catch (error) {
+      console.error('Failed to generate receipt:', error);
+      toast({
+        title: 'Export Failed',
+        description: 'Failed to generate the PDF. Please try again.',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -175,15 +198,25 @@ export const TenantDetailModal = ({ open, onOpenChange, booking }: TenantDetailM
           </div>
 
           {/* Notes */}
-          {booking.notes && (
-            <div className="space-y-2">
-              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-                {t('notes')}
-              </h3>
-              <p className="text-sm p-3 rounded-lg bg-secondary/30">{booking.notes}</p>
-            </div>
-          )}
+          {/* Download Receipt Button */}
+          <div className="pt-4 border-t">
+            <Button
+              onClick={() => setPdfModalOpen(true)}
+              className="w-full gradient-ocean gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Download Receipt
+            </Button>
+          </div>
         </div>
+
+        {/* PDF Language Selection Modal */}
+        <PdfLanguageModal
+          open={pdfModalOpen}
+          onOpenChange={setPdfModalOpen}
+          onConfirm={handleDownloadReceipt}
+          title="Download Receipt"
+        />
       </DialogContent>
     </Dialog>
   );
