@@ -24,7 +24,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Loader2, CalendarIcon } from 'lucide-react';
+import { Loader2, CalendarIcon, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { formatEGP } from '@/lib/currency';
@@ -91,13 +91,13 @@ export const BookingFormModal = ({
     return calculateEndDate(startDate, durationDays);
   }, [startDate, durationDays]);
 
-  // Dynamic total calculation: Base + Deposit (if enabled) + Housekeeping (if enabled)
+  // CORRECTED: Total = Base + Housekeeping (NO Deposit - it's refundable)
   const totalAmount = useMemo(() => {
     const baseAmount = calculateTotalAmount(dailyRate, durationDays);
-    const deposit = depositEnabled ? depositAmount : 0;
     const housekeeping = housekeepingEnabled ? housekeepingAmount : 0;
-    return baseAmount + deposit + housekeeping;
-  }, [dailyRate, durationDays, depositEnabled, depositAmount, housekeepingEnabled, housekeepingAmount]);
+    // Deposit is NOT added to total rent as it's refundable
+    return baseAmount + housekeeping;
+  }, [dailyRate, durationDays, housekeepingEnabled, housekeepingAmount]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,7 +220,7 @@ export const BookingFormModal = ({
                       !startDate && 'text-muted-foreground'
                     )}
                   >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    <CalendarIcon className="ltr:mr-2 rtl:ml-2 h-4 w-4" />
                     {startDate ? format(startDate, 'PPP') : t('startDate')}
                   </Button>
                 </PopoverTrigger>
@@ -275,28 +275,6 @@ export const BookingFormModal = ({
             </div>
           </div>
 
-          {/* Deposit Toggle with Amount */}
-          <div className="space-y-3 rounded-lg border p-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="deposit" className="cursor-pointer">{t('deposit')}</Label>
-              <Switch
-                checked={depositEnabled}
-                onCheckedChange={setDepositEnabled}
-                id="deposit"
-              />
-            </div>
-            {depositEnabled && (
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder={`${t('deposit')} (EGP)`}
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(parseFloat(e.target.value) || 0)}
-              />
-            )}
-          </div>
-
           {/* Housekeeping Toggle with Amount */}
           <div className="space-y-3 rounded-lg border p-4">
             <div className="flex items-center justify-between">
@@ -316,6 +294,37 @@ export const BookingFormModal = ({
                 value={housekeepingAmount}
                 onChange={(e) => setHousekeepingAmount(parseFloat(e.target.value) || 0)}
               />
+            )}
+          </div>
+
+          {/* Deposit Toggle with Amount - REFUNDABLE NOTE */}
+          <div className="space-y-3 rounded-lg border p-4 border-dashed">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="deposit" className="cursor-pointer">{t('deposit')}</Label>
+                <span className="text-xs text-muted-foreground">(Refundable)</span>
+              </div>
+              <Switch
+                checked={depositEnabled}
+                onCheckedChange={setDepositEnabled}
+                id="deposit"
+              />
+            </div>
+            {depositEnabled && (
+              <>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder={`${t('deposit')} (EGP)`}
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(parseFloat(e.target.value) || 0)}
+                />
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Info className="h-3 w-3" />
+                  <span>Deposit is not included in Total Rent (refundable)</span>
+                </div>
+              </>
             )}
           </div>
 
