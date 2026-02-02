@@ -100,10 +100,10 @@ const pdfLabels = {
   },
 };
 
-// Setup PDF with embedded Arabic font (no runtime fetching)
-const setupPdfWithFont = (pdf: jsPDF, isArabic: boolean): void => {
+// Setup PDF with Arabic font (async - fetches font from CDN)
+const setupPdfWithFont = async (pdf: jsPDF, isArabic: boolean): Promise<void> => {
   if (isArabic) {
-    applyArabicFont(pdf);
+    await applyArabicFont(pdf);
   } else {
     (pdf as any).setR2L?.(false);
     pdf.setFont('helvetica', 'normal');
@@ -165,7 +165,7 @@ export const generateBookingPDF = async (data: BookingReceiptData, language: Lan
   const grandTotal = baseAmount + housekeepingAmount;
   
   const pdf = new jsPDF('p', 'mm', 'a4');
-  setupPdfWithFont(pdf, isArabic);
+  await setupPdfWithFont(pdf, isArabic);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
   const marginX = 15;
@@ -369,7 +369,7 @@ export const generateReportPDF = async (data: ReportData, language: Language = '
   const isArabic = language === 'ar';
   
   const pdf = new jsPDF('p', 'mm', 'a4');
-  setupPdfWithFont(pdf, isArabic);
+  await setupPdfWithFont(pdf, isArabic);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -516,7 +516,7 @@ export const generateUnitPerformancePDF = async (
   const isArabic = language === 'ar';
   
   const pdf = new jsPDF('p', 'mm', 'a4');
-  setupPdfWithFont(pdf, isArabic);
+  await setupPdfWithFont(pdf, isArabic);
   
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
