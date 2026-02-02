@@ -25,13 +25,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Loader2, CalendarIcon, ThumbsUp, ThumbsDown, Trash2, Info } from 'lucide-react';
+import { Loader2, CalendarIcon, ThumbsUp, ThumbsDown, Trash2, Info, Download } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { formatEGP } from '@/lib/currency';
 import { calculateEndDate, calculateTotalAmount } from '@/lib/date-utils';
 import { UpdateBookingData } from '@/hooks/useBookings';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { generateBookingReceipt, PdfLanguage } from '@/lib/pdf';
+import { PdfLanguageModal } from '@/components/pdf/PdfLanguageModal';
+import { toast } from '@/hooks/use-toast';
 
 interface BookingDetailModalProps {
   open: boolean;
@@ -78,6 +81,26 @@ export const BookingDetailModal = ({
   const [tenantRating, setTenantRating] = useState<TenantRating | null>(null);
   const [loading, setLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+
+  const handleDownloadReceipt = async (language: PdfLanguage) => {
+    if (!booking) return;
+    try {
+      await generateBookingReceipt(booking, language);
+      toast({
+        title: 'Receipt Downloaded',
+        description: 'Your booking receipt has been generated successfully.',
+      });
+    } catch (error) {
+      console.error('Failed to generate receipt:', error);
+      toast({
+        title: 'Export Failed',
+        description: 'Failed to generate the PDF. Please try again.',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
 
   useEffect(() => {
     if (booking) {
@@ -401,6 +424,15 @@ export const BookingDetailModal = ({
           <div className="flex flex-wrap gap-3 pt-4 border-t">
             <Button
               type="button"
+              variant="outline"
+              onClick={() => setPdfModalOpen(true)}
+              className="flex-1"
+            >
+              <Download className="h-4 w-4 ltr:mr-2 rtl:ml-2" />
+              Receipt
+            </Button>
+            <Button
+              type="button"
               variant="destructive"
               onClick={handleDelete}
               disabled={deleteLoading}
@@ -438,6 +470,14 @@ export const BookingDetailModal = ({
             </Button>
           </div>
         </form>
+
+        {/* PDF Language Selection Modal */}
+        <PdfLanguageModal
+          open={pdfModalOpen}
+          onOpenChange={setPdfModalOpen}
+          onConfirm={handleDownloadReceipt}
+          title="Download Receipt"
+        />
       </DialogContent>
     </Dialog>
   );

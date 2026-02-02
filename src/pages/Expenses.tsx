@@ -36,12 +36,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Plus, CalendarIcon, Loader2, Trash2, Receipt, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, CalendarIcon, Loader2, Trash2, Receipt, DollarSign, TrendingUp, TrendingDown, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { formatEGP, formatEGPCompact } from '@/lib/currency';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getUnitTypeEmoji } from '@/types/database';
+import { generateFinancialReport, PdfLanguage } from '@/lib/pdf';
+import { PdfLanguageModal } from '@/components/pdf/PdfLanguageModal';
+import { toast } from '@/hooks/use-toast';
 
 const expenseCategories = [
   'Maintenance',
@@ -68,6 +71,7 @@ const ExpensesPage = () => {
   const [unitFilter, setUnitFilter] = useState<string>('all');
   const [formOpen, setFormOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('expenses');
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
   
   // Form state
   const [unitId, setUnitId] = useState<string>('');
@@ -158,6 +162,24 @@ const ExpensesPage = () => {
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this expense?')) {
       await deleteExpense.mutateAsync(id);
+    }
+  };
+
+  const handleExportReport = async (language: PdfLanguage) => {
+    try {
+      await generateFinancialReport(unitPerformanceData, performanceTotals, language);
+      toast({
+        title: 'Report Downloaded',
+        description: 'Your financial report has been generated successfully.',
+      });
+    } catch (error) {
+      console.error('Failed to generate report:', error);
+      toast({
+        title: 'Export Failed',
+        description: 'Failed to generate the PDF. Please try again.',
+        variant: 'destructive',
+      });
+      throw error;
     }
   };
 
@@ -341,6 +363,14 @@ const ExpensesPage = () => {
               <p className="text-muted-foreground">
                 View financial performance by unit. Revenue = Base Rent only (excludes housekeeping).
               </p>
+              <Button 
+                onClick={() => setPdfModalOpen(true)}
+                variant="outline"
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Export Report
+              </Button>
             </div>
 
             {isLoading ? (
@@ -533,6 +563,14 @@ const ExpensesPage = () => {
             </form>
           </DialogContent>
         </Dialog>
+
+        {/* PDF Language Selection Modal */}
+        <PdfLanguageModal
+          open={pdfModalOpen}
+          onOpenChange={setPdfModalOpen}
+          onConfirm={handleExportReport}
+          title="Export Financial Report"
+        />
       </div>
     </AppLayout>
   );
