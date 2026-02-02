@@ -16,7 +16,7 @@ export const UnitProfitabilityCard = ({
   revenue,
   expenses,
 }: UnitProfitabilityCardProps) => {
-  const { t } = useLanguage();
+  const { t, isRTL } = useLanguage();
   const netProfit = revenue - expenses;
   const isProfit = netProfit >= 0;
 
@@ -24,7 +24,7 @@ export const UnitProfitabilityCard = ({
     <Card className="shadow-soft">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
-          Financial Summary
+          {t('financialSummary')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -64,7 +64,7 @@ export const UnitProfitabilityCard = ({
                   <TrendingDown className="h-4 w-4 text-destructive" />
                 )}
               </div>
-              <span className="font-medium">Net Profit</span>
+              <span className="font-medium">{t('netProfit')}</span>
             </div>
             <span className={cn(
               "font-bold text-lg",
