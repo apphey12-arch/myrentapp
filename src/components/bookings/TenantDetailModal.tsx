@@ -52,8 +52,8 @@ export const TenantDetailModal = ({ open, onOpenChange, booking }: TenantDetailM
   const housekeepingAmount = booking.housekeeping_amount || 0;
   const totalRent = baseAmount + housekeepingAmount;
 
-  const handlePrintReceipt = (language: Language) => {
-    generateBookingPDF({
+  const handlePrintReceipt = async (language: Language) => {
+    await generateBookingPDF({
       tenantName: booking.tenant_name,
       phoneNumber: booking.phone_number,
       unitName: booking.unit?.name || 'Unknown',
